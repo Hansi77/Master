@@ -36,7 +36,7 @@ def plotEdges(inputEdge,p):
     for edge in inputEdge:
         connectPoints(p[int(edge[0])],p[int(edge[1])],color = 'r') 
 
-def halfCircleMeshMaker(x0,x1,y0,y1 = np.inf, Nr = 1,edgepoints = True):
+def halfCircleMeshMaker(x0,x1,y0,y1 = np.inf, Nr = 1,edgepoints = False):
     r = (x1 - x0)/2
     rpart = r/Nr
     rlist = np.asarray([rpart*n for n in range(1,Nr+1)])
@@ -111,35 +111,83 @@ def meshMaker(x0, x1, y0, y1, N, M,edgepoints = False):
         edge[i][1] = int(edgepts[i+1])
     
     if edgepoints:
-        return bp, mesh.simplices, south, east, np.flip(north), np.flip(west), edge
+        return bp, mesh.simplices, edge, south, east, np.flip(north), np.flip(west)
 
     return bp, mesh.simplices, edge
 
-p1, mesh1,south,north,west,east,junk = meshMaker(0,2,.3,.5,40,6,edgepoints = True)
-p2, mesh2,junk = meshMaker(1.3,1.7,.5,.6,8,2)
-p3, mesh3,edge = meshMaker(1.3,1.7,.2,.3,8,2)
-p4, mesh4, flatedge4, curvededge4,edge4 = halfCircleMeshMaker(.3,.7,.5,y1 = .55,Nr =4)
-p5, mesh5, flatedge5, curvededge5,edge5 = halfCircleMeshMaker(.3,.7,.3,y1 = .25,Nr =4)
+def domainCreator(halfcircles=1, rectangles=0,resolution=1,circleheight =1, rectangleheight = 1):
+    tol = 10E-10
+    length = 1/5 + (3*(halfcircles + rectangles))/5
+    N = int(length*10*resolution)
+    M = int(4*resolution)
+    p,mesh,edge = meshMaker(0,length,.3,.7,N,M)
+    plist = [p]
+    meshlist = [mesh]
+    edgelist = [edge]
+    position = 0.2
+    circleheight *= 0.2
+    rectangleheight *= 0.2
 
-print(south)
-print(north)
-print(west)
-print(east)
+    while halfcircles != 0:
+        p, mesh, edge, flat, curve = halfCircleMeshMaker(position,position +.4,.7,y1 = .7 + circleheight, Nr = int(2*resolution),edgepoints = True)
+        plist.append(p)
+        meshlist.append(mesh)
+        edgelist.append(edge)
+        p, mesh, edge, flat, curve = halfCircleMeshMaker(position,position +.4,.3,y1 = .3 - circleheight, Nr = int(2*resolution),edgepoints = True)
+        plist.append(p)
+        meshlist.append(mesh)
+        edgelist.append(edge)
+        position += .6
+        halfcircles -= 1
 
-p = np.concatenate((p1,p2,p3,p4,p5),axis = 0)
-mesh = np.concatenate((mesh1,mesh2+len(p1),mesh3+len(p1)+len(p2),mesh4+len(p1)+len(p2)+len(p3),mesh5+len(p1)+len(p2)+len(p3)+len(p4)), axis = 0)
+    while rectangles != 0:
+        p, mesh, edge = meshMaker(position,position + .4,.7,.7 + rectangleheight, 4*resolution,2*resolution)
+        plist.append(p)
+        meshlist.append(mesh)
+        edgelist.append(edge)
+        p, mesh, edge = meshMaker(position,position +.4,.3 - rectangleheight, .3,4*resolution,2*resolution)
+        plist.append(p)
+        meshlist.append(mesh)
+        edgelist.append(edge)
+        position += .6
+        rectangles -= 1
+
+    for points, meshes, edges in zip(plist,meshlist,edgelist):
+        plength = len(p)
+        p = np.concatenate((p,points),axis = 0)
+        mesh = np.concatenate((mesh,meshes + plength),axis = 0)
+        edge = np.concatenate((edge,edges + plength),axis = 0)
+
+    return p, mesh, edge
+
+p, mesh, edge = domainCreator(2, 2,1,.5,.4)
+
+p1, mesh1, edge1 = meshMaker(0,2,.3,.5,40,8)
+p2, mesh2, edge2 = meshMaker(1.3,1.7,.5,.6,8,4)
+
+
 
 plt.figure(1)
 plotElements(p,mesh)
 plt.savefig("testmesh", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
 
-#p6, mesh6, edge = halfCircleMeshMaker(.3,.7,.5,y1 = .6,Nr =4,edgepoints = False)
-
-#plt.figure(2)
-#plotElements(p6,mesh6)
-#plt.savefig("halvfigur", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
+plt.figure(2)
+plotPoints(p)
+plt.savefig("testpoints", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
 
 plt.figure(3)
-plotEdges(edge,p3)
-plt.savefig("edge.png")
+plotEdges(edge,p)
+plt.savefig("testedges", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
+
+
 plt.close("all")
+
+
+#p1, mesh1, edge1 = meshMaker(0,2,.3,.5,40,8)
+#p2, mesh2, edge2 = meshMaker(1.3,1.7,.5,.6,8,4)
+#p3, mesh3, edge3 = meshMaker(1.3,1.7,.2,.3,8,4)
+#p4, mesh4, edge4 = halfCircleMeshMaker(.3,.7,.5,y1 = .55,Nr =4)
+#p5, mesh5, edge5 = halfCircleMeshMaker(.3,.7,.3,y1 = .25,Nr =4)
+
+#p = np.concatenate((p1,p2,p3,p4,p5),axis = 0)
+#mesh = np.concatenate((mesh1,mesh2+len(p1),mesh3+len(p1)+len(p2),mesh4+len(p1)+len(p2)+len(p3),mesh5+len(p1)+len(p2)+len(p3)+len(p4)), axis = 0)
