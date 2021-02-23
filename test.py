@@ -85,6 +85,7 @@ def meshMaker(x0, x1, y0, y1, N, M,edgepoints = False):
     Ay = ay.ravel()
 
     bp = np.vstack((Ax, Ay)).T
+
     mesh = spsa.Delaunay(bp)
     south = []
     east = []
@@ -115,57 +116,77 @@ def meshMaker(x0, x1, y0, y1, N, M,edgepoints = False):
 
     return bp, mesh.simplices, edge
 
+def nodeReplacer(p1,p2,edge,mesh):
+    flat = np.copy(edge)
+    indexes = np.asarray([i for i in range(len(p2))])
+    inverses = indexes[~np.isin(np.arange(indexes.size), flat)]
+    replacepoints =p2[edge]
+    p2 = p2[inverses]
+    tol = 10E-10
+
+    for count,inv in enumerate(inverses):
+        mesh = [[count + len(p1) if x == inv else x for x in sub] for sub in mesh]
+
+    for count,point in enumerate(p1):
+        for count2, (replace,index) in enumerate(zip(replacepoints,flat)):
+            if point[0] - 10E-10 < replace[0] < point[0] +10E-10 and point[1] - 10E-10 < replace[1] < point[1] + 10E-10:
+                mesh = [[count if x == index else x for x in sub] for sub in mesh]
+                replacepoints = [r for r in replacepoints if r[0] != replace[0]]
+                flat = np.delete(flat,count2)
+                break
+        if len(flat) == 0:
+            break
+    
+    mesh = np.asarray(mesh)
+    p2 = np.asarray(p2)
+    return p2, mesh
+
 def domainCreator(halfcircles=1, rectangles=0,resolution=1,circleheight =1, rectangleheight = 1):
     tol = 10E-10
     length = 1/5 + (3*(halfcircles + rectangles))/5
     N = int(length*10*resolution)
     M = int(4*resolution)
     p,mesh,edge = meshMaker(0,length,.3,.7,N,M)
-    plist = [p]
-    meshlist = [mesh]
     edgelist = [edge]
     position = 0.2
     circleheight *= 0.2
     rectangleheight *= 0.2
 
     while halfcircles != 0:
-        p, mesh, edge, flat, curve = halfCircleMeshMaker(position,position +.4,.7,y1 = .7 + circleheight, Nr = int(2*resolution),edgepoints = True)
-        plist.append(p)
-        meshlist.append(mesh)
+        newp, newmesh, edge, flat, curve = halfCircleMeshMaker(position,position +.4,.7,y1 = .7 + circleheight, Nr = int(2*resolution),edgepoints = True)
+        newp, newmesh = nodeReplacer(p,newp,flat,newmesh)
+        p = np.concatenate((p,newp),axis = 0)
+        mesh = np.concatenate((mesh,newmesh),axis = 0)
         edgelist.append(edge)
-        p, mesh, edge, flat, curve = halfCircleMeshMaker(position,position +.4,.3,y1 = .3 - circleheight, Nr = int(2*resolution),edgepoints = True)
-        plist.append(p)
-        meshlist.append(mesh)
+
+        newp, newmesh, edge, flat, curve = halfCircleMeshMaker(position,position +.4,.3,y1 = .3 - circleheight, Nr = int(2*resolution),edgepoints = True)
+        newp, newmesh = nodeReplacer(p,newp,flat,newmesh)
+        p = np.concatenate((p,newp),axis = 0)
+        mesh = np.concatenate((mesh,newmesh),axis = 0)
         edgelist.append(edge)
+
         position += .6
         halfcircles -= 1
 
     while rectangles != 0:
-        p, mesh, edge = meshMaker(position,position + .4,.7,.7 + rectangleheight, 4*resolution,2*resolution)
-        plist.append(p)
-        meshlist.append(mesh)
+        newp, newmesh, edge, south, east, north, west = meshMaker(position,position + .4,.7,.7 + rectangleheight, 4*resolution,2*resolution,edgepoints=True)
+        newp, newmesh = nodeReplacer(p,newp,south,newmesh)
+        p = np.concatenate((p,newp),axis = 0)
+        mesh = np.concatenate((mesh,newmesh),axis = 0)
         edgelist.append(edge)
-        p, mesh, edge = meshMaker(position,position +.4,.3 - rectangleheight, .3,4*resolution,2*resolution)
-        plist.append(p)
-        meshlist.append(mesh)
+
+        newp, newmesh, edge, south, east, north, west = meshMaker(position,position +.4,.3 - rectangleheight, .3,4*resolution,2*resolution,edgepoints=True)
+        newp, newmesh = nodeReplacer(p,newp,north,newmesh)
+        p = np.concatenate((p,newp),axis = 0)
+        mesh = np.concatenate((mesh,newmesh),axis = 0)
         edgelist.append(edge)
+
         position += .6
         rectangles -= 1
 
-    for points, meshes, edges in zip(plist,meshlist,edgelist):
-        plength = len(p)
-        p = np.concatenate((p,points),axis = 0)
-        mesh = np.concatenate((mesh,meshes + plength),axis = 0)
-        edge = np.concatenate((edge,edges + plength),axis = 0)
-
     return p, mesh, edge
 
-p, mesh, edge = domainCreator(2, 2,1,.5,.4)
-
-p1, mesh1, edge1 = meshMaker(0,2,.3,.5,40,8)
-p2, mesh2, edge2 = meshMaker(1.3,1.7,.5,.6,8,4)
-
-
+p, mesh, edge = domainCreator(4, 0,2,.5,.4)
 
 plt.figure(1)
 plotElements(p,mesh)
@@ -181,13 +202,3 @@ plt.savefig("testedges", dpi=500, facecolor='w', edgecolor='w',orientation='port
 
 
 plt.close("all")
-
-
-#p1, mesh1, edge1 = meshMaker(0,2,.3,.5,40,8)
-#p2, mesh2, edge2 = meshMaker(1.3,1.7,.5,.6,8,4)
-#p3, mesh3, edge3 = meshMaker(1.3,1.7,.2,.3,8,4)
-#p4, mesh4, edge4 = halfCircleMeshMaker(.3,.7,.5,y1 = .55,Nr =4)
-#p5, mesh5, edge5 = halfCircleMeshMaker(.3,.7,.3,y1 = .25,Nr =4)
-
-#p = np.concatenate((p1,p2,p3,p4,p5),axis = 0)
-#mesh = np.concatenate((mesh1,mesh2+len(p1),mesh3+len(p1)+len(p2),mesh4+len(p1)+len(p2)+len(p3),mesh5+len(p1)+len(p2)+len(p3)+len(p4)), axis = 0)
