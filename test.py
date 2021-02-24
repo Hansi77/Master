@@ -117,25 +117,19 @@ def meshMaker(x0, x1, y0, y1, N, M,edgepoints = False):
     return bp, mesh.simplices, edge
 
 def nodeReplacer(p1,p2,edge,mesh):
-    flat = np.copy(edge)
     indexes = np.asarray([i for i in range(len(p2))])
-    inverses = indexes[~np.isin(np.arange(indexes.size), flat)]
+    inverses = indexes[~np.isin(np.arange(indexes.size), edge)]
     replacepoints =p2[edge]
     p2 = p2[inverses]
-    tol = 10E-10
+    tol = 10E-10  
 
     for count,inv in enumerate(inverses):
         mesh = [[count + len(p1) if x == inv else x for x in sub] for sub in mesh]
 
     for count,point in enumerate(p1):
-        for count2, (replace,index) in enumerate(zip(replacepoints,flat)):
-            if point[0] - 10E-10 < replace[0] < point[0] +10E-10 and point[1] - 10E-10 < replace[1] < point[1] + 10E-10:
+        for replace,index in zip(replacepoints,edge):
+            if point[0] - tol < replace[0] < point[0] + tol and point[1] - tol < replace[1] < point[1] + tol:
                 mesh = [[count if x == index else x for x in sub] for sub in mesh]
-                replacepoints = [r for r in replacepoints if r[0] != replace[0]]
-                flat = np.delete(flat,count2)
-                break
-        if len(flat) == 0:
-            break
     
     mesh = np.asarray(mesh)
     p2 = np.asarray(p2)
@@ -146,8 +140,7 @@ def domainCreator(halfcircles=1, rectangles=0,resolution=1,circleheight =1, rect
     length = 1/5 + (3*(halfcircles + rectangles))/5
     N = int(length*10*resolution)
     M = int(4*resolution)
-    p,mesh,edge = meshMaker(0,length,.3,.7,N,M)
-    edgelist = [edge]
+    p,mesh,edge,south,east,north,west = meshMaker(0,length,.5,.7,N,M,edgepoints = True)
     position = 0.2
     circleheight *= 0.2
     rectangleheight *= 0.2
@@ -157,13 +150,6 @@ def domainCreator(halfcircles=1, rectangles=0,resolution=1,circleheight =1, rect
         newp, newmesh = nodeReplacer(p,newp,flat,newmesh)
         p = np.concatenate((p,newp),axis = 0)
         mesh = np.concatenate((mesh,newmesh),axis = 0)
-        edgelist.append(edge)
-
-        newp, newmesh, edge, flat, curve = halfCircleMeshMaker(position,position +.4,.3,y1 = .3 - circleheight, Nr = int(2*resolution),edgepoints = True)
-        newp, newmesh = nodeReplacer(p,newp,flat,newmesh)
-        p = np.concatenate((p,newp),axis = 0)
-        mesh = np.concatenate((mesh,newmesh),axis = 0)
-        edgelist.append(edge)
 
         position += .6
         halfcircles -= 1
@@ -173,32 +159,33 @@ def domainCreator(halfcircles=1, rectangles=0,resolution=1,circleheight =1, rect
         newp, newmesh = nodeReplacer(p,newp,south,newmesh)
         p = np.concatenate((p,newp),axis = 0)
         mesh = np.concatenate((mesh,newmesh),axis = 0)
-        edgelist.append(edge)
-
-        newp, newmesh, edge, south, east, north, west = meshMaker(position,position +.4,.3 - rectangleheight, .3,4*resolution,2*resolution,edgepoints=True)
-        newp, newmesh = nodeReplacer(p,newp,north,newmesh)
-        p = np.concatenate((p,newp),axis = 0)
-        mesh = np.concatenate((mesh,newmesh),axis = 0)
-        edgelist.append(edge)
 
         position += .6
         rectangles -= 1
 
+    pfx = p[:,0]
+    pfy = p[:,1]
+
+    pflip = np.vstack((pfx,1-pfy)).T
+    pflip = pflip[np.asarray(south).max()+1:]
+    meshflip = [[x + len(pflip) if x > np.asarray(south).max() else x for x in sub] for sub in mesh]
+    p = np.concatenate((p,pflip,),axis = 0)
+    mesh = np.concatenate((mesh,meshflip),axis = 0)
+
     return p, mesh, edge
 
-p, mesh, edge = domainCreator(4, 0,2,.5,.4)
+starttime = time.time()
+p, mesh, edge = domainCreator(2, 2,2,.5,.8)
+print("Nodes:",len(p))
+print("time:",time.time()-starttime)
 
 plt.figure(1)
 plotElements(p,mesh)
+plt.axis('scaled')
 plt.savefig("testmesh", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
 
-plt.figure(2)
-plotPoints(p)
-plt.savefig("testpoints", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
-
-plt.figure(3)
-plotEdges(edge,p)
-plt.savefig("testedges", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
-
+#plt.figure(2)
+#plotPoints(p)
+#plt.savefig("testpoints", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
 
 plt.close("all")
