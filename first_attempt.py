@@ -86,7 +86,7 @@ def quadElements(points,N):
                 r += 1
     for j in range(i+1,i+(2**N)+1):
         homo_dir.append(j)
-    return np.asarray(elQ),homo_dir,non_homo_dir,homo_neu
+    return np.asarray(elQ),np.array(homo_dir),np.array(non_homo_dir),homo_neu
 
 def phiSq():#p,element):
     phi_el = np.zeros((9,9))
@@ -129,7 +129,21 @@ def phiLin():
         basis_coeffs[a] = c
     return basis_coeffs
 
-def gauss2D(integrand,p,el,degree =0,basis=0):
+def phiLin2(points,el):
+    phi_el = np.ones((4,4))
+    for i,p in enumerate(points[el]):
+        phi_el[i] = [1,p[0],p[1],p[0]*p[1]]
+    basis_coeffs = np.zeros((4,4))
+
+    #basis_functions: konstantene til hver basisfunksjon for elementet: [[C1,C1x,C1y],[C2,C2x,C2y],[C3,C3x,C3y]]               
+    for a in range(4):
+        b = np.zeros(4)
+        b[a] = 1
+        c = np.linalg.solve(phi_el,b)    
+        basis_coeffs[a] = c
+    return basis_coeffs
+
+def gauss2D(integrand,p,el,basis,i,j):
     p1,p2,p3,p4 = p[el[0]], p[el[1]], p[el[2]], p[el[3]]
     a,b,c,d = p1[0], p2[0], p2[1], p3[1]
     weights = [5/9,8/9,5/9]
@@ -141,11 +155,53 @@ def gauss2D(integrand,p,el,degree =0,basis=0):
     eval_pts = [-np.sqrt(3/5),0,np.sqrt(3/5)]
     for w1,ev1 in zip(weights,eval_pts):
         for w2,ev2 in zip(weights,eval_pts):
-            integral += w1*w2*h1*h3*integrand(h1*ev1 + h2,h3*ev2+h4)
+            integral += w1*w2*h1*h3*integrand(ev1,ev2,basis,i,j)
     return integral
 
+def gauss2D2(integrand,p,el,basis,i,j):
+    p1,p2,p3,p4 = p[el[0]], p[el[1]], p[el[2]], p[el[3]]
+    a,b,c,d = p1[0], p2[0], p2[1], p3[1]
+    weights = [5/9,8/9,5/9]
+    h1 = (b-a)/2
+    h2 = (b+a)/2
+    h3 = (d-c)/2
+    h4 = (d+c)/2
+    integral = 0
+    eval_pts = [-np.sqrt(3/5),0,np.sqrt(3/5)]
+    for w1,ev1 in zip(weights,eval_pts):
+        for w2,ev2 in zip(weights,eval_pts):
+            integral += w1*w2*h1*h3*integrand(h1*ev1+h2,h3*ev2+h4,basis,i,j)
+    return integral
+
+def stiffHelp(points,el,int_func,basis):
+    dim = len(basis)
+    a_el = np.zeros((dim,dim))
+    basis = phiLin2(points,el)
+    for i in range(dim):
+        for j in range(dim):
+            a_el[i,j] += gauss2D2(int_func,points,el,basis,i,j)
+    return a_el
+
+def stiffnessMat(int_func,basis,points,elements):
+    A = sp.lil_matrix((len(points),len(points)))
+    for el in elements:
+        a_el = stiffHelp(points,el,int_func,basis)
+        for i,ai in enumerate(el):
+            for j,aj in enumerate(el):
+                A[ai,aj] += a_el[i,j]
+    return A
+
+def loadVec(int_func,basis,points,elements):
+    f = np.zeros((len(points)))
+    i = 0
+    for el in elements:
+        basis = phiLin2(points,el)
+        for j,fj in enumerate(el):
+            f[fj] += gauss2D2(int_func,points,el,basis,i,j)
+    return f
+
 #definer området:
-N = 2
+N = 5
 x = np.linspace(0,1,int(5*(2**N)+1))
 y = np.linspace(0,.4,int(2*(2**N)+1))
 X,Y = np.meshgrid(x,y)
@@ -156,34 +212,49 @@ py = Y.ravel()
 origpts = np.vstack((px,py)).T
 points = origpts[np.logical_or(origpts[:,1] <.20005,np.logical_and(origpts[:,0] > .39995,origpts[:,0] < .60005))]
 
+
 elements,homog_dir,non_homog_dir,neumann = quadElements(points,N)
 
-csq = phiSq()
+#csq = phiSq()
 clin = phiLin()
 
-refx = np.linspace(-1,1,51)
-refX,refY = np.meshgrid(refx,refx)
+grad_phi = lambda x, y, c, i, j: 25*(c[i][1] + c[i][3]*y)*(c[j][1]+c[j][3]*y) + (c[i][2]+ c[i][3]*x)*(c[j][2]+ c[j][3]*x)
 
-a = 2
-b = 4
-c = 1
-d = 2
-p1 = [a,c]
-p2 = [b,c]
-p3 = [b,d]
-p4 = [a,d]
-h1 = (b-a)/2
-h2 = (b+a)/2
-h3 = (d-c)/2
-h4 = (d+c)/2
+f_int = lambda x, y, c, i, j: 3000*(c[j][0] + c[j][1]*x + c[j][2]*y + c[j][3]*x*y)
 
-pts = [p1,p2,p3,p4]
-el = [0,1,2,3]
+f_temp = loadVec(f_int,clin,points,elements)
+loadpts = points[:,0] > .699995
+f = np.zeros((len(points)))
+f[loadpts] = f_temp[loadpts]
 
-u = lambda x,y: x**3 + y**3
+A = stiffnessMat(grad_phi,clin,points,elements)
+inner = np.array([i for i in range(len(points))])
+inner = inner[~np.isin(np.arange(inner.size), np.concatenate((non_homog_dir,homog_dir)))]
+outer = np.concatenate((non_homog_dir,homog_dir))
 
-print(gauss2D(u,pts,el))
+A_inner = A[inner]
+A_inner = A_inner[:,inner]
+f_inner = f[inner]
+B = A[inner]
+B = B[:,outer]
 
+
+rg_homo = np.zeros_like(homog_dir)
+rg_non_homo = np.zeros_like(non_homog_dir)
+rgy = points[non_homog_dir][:,1]
+
+rg_non_homo[:] = 2000*rgy*(.2-rgy)
+rg = np.concatenate((rg_non_homo,rg_homo))
+A_inner = A_inner.tocsr()
+B = B.tocsr()
+
+rhs = f_inner - B@rg
+
+u_bar = solver(A_inner,rhs)
+
+u = np.zeros((len(points)))
+u[inner] = u_bar
+u[outer] = rg
 '''
 for i in range(9):
     c = csq[i]
@@ -211,29 +282,29 @@ for i in range(4):
     plt.savefig("linear_basis"+str(i), dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
     
     plt.close('all')
+'''
 
 #print(homog_dir)
 #print(non_homog_dir)
 #print(neumann)
 
-plt.figure(1)
-plotSqElements(points,elements)
-for i in range(len(points)):
-    plt.annotate(str(i),points[i])
-plt.axis('scaled')
-plt.savefig("figur1", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
+#plt.figure(1)
+#plotSqElements(points,elements)
+#for i in range(len(points)):
+#    plt.annotate(str(i),points[i])
+#plt.axis('scaled')
+#plt.savefig("figur1", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
 
-u = np.sin(points[:,0]) + np.cos(points[:,1])
+#u = np.sin(points[:,0]) + np.cos(points[:,1])
 
 plt.figure(2)
 
-ax1 = plt.tricontourf(points[:,0],points[:,1],elements[:,:3],u,levels = 30,cmap = 'rainbow')
-ax = plt.tricontourf(points[:,0],points[:,1],elements[:,[0,2,3]],u,levels = 30,cmap = 'rainbow')
-ax = plt.tricontour(points[:,0],points[:,1],elements[:,:3],u,levels = 30,colors = 'black',linewidths=0.3)
-ax = plt.tricontour(points[:,0],points[:,1],elements[:,[0,2,3]],u,levels = 30,colors = 'black',linewidths=0.3)
+ax1 = plt.tricontourf(points[:,0],points[:,1],elements[:,:3],u,levels = 40,cmap = 'rainbow')
+ax = plt.tricontourf(points[:,0],points[:,1],elements[:,[0,2,3]],u,levels = 40,cmap = 'rainbow')
+ax = plt.tricontour(points[:,0],points[:,1],elements[:,:3],u,levels = 40,colors = 'black',linewidths=0.25)
+ax = plt.tricontour(points[:,0],points[:,1],elements[:,[0,2,3]],u,levels = 40,colors = 'black',linewidths=0.25)
 plt.axis('scaled')
 plt.colorbar(ax1)
 plt.savefig("figur2", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
 
 plt.close('all')
-'''
