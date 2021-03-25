@@ -282,7 +282,7 @@ def createB(int_func,points,elements):
     return B
 
 #definer området:
-N = 4
+N = 3
 x = np.linspace(0,1,int(5*(2**N)+1))
 y = np.linspace(0,.4,int(2*(2**N)+1))
 X,Y = np.meshgrid(x,y)
@@ -298,11 +298,11 @@ zeta = lambda x,y,c,i: c[i][0] + c[i][1]*x + c[i][2]*y +c[i][3]*x*y
 zeta_dx = lambda x,y,c,i: c[i][1] + c[i][3]*y
 zeta_dy = lambda x,y,c,i: c[i][2] + c[i][3]*x
 
-mu1 = 3
+mu1 = 1
 
 a_bilin = lambda x,y,c,i,j: (1/mu1)*(phi_dx(x,y,c,j)*phi_dx(x,y,c,i) + phi_dy(x,y,c,j)*phi_dy(x,y,c,i))
-b_bilin_x = lambda x,y,c1,c2,i,j: -phi_dx(x,y,c2,j)*zeta(x,y,c1,i)
-b_bilin_y = lambda x,y,c1,c2,i,j: -phi_dy(x,y,c2,j)*zeta(x,y,c1,i)
+b_bilin_x = lambda x,y,c1,c2,i,j: (2**(N+1))*phi_dx(x,y,c2,j)*zeta(x,y,c1,i)
+b_bilin_y = lambda x,y,c1,c2,i,j: (2**(N+1))*phi_dy(x,y,c2,j)*zeta(x,y,c1,i)
 
 origpts = np.vstack((px,py)).T
 points = origpts[np.logical_or(origpts[:,1] <.20005,np.logical_and(origpts[:,0] > .39995,origpts[:,0] < .60005))]
@@ -313,10 +313,76 @@ A = createA(a_bilin,points,elements)
 Bx = createB(b_bilin_x,points,elements)
 By = createB(b_bilin_y,points,elements)
 
-inner = np.array([i for i in range(len(points))])
-inner = inner[~np.isin(np.arange(inner.size), np.concatenate((non_homog_dir,homog_dir)))]
-outer = np.concatenate((non_homog_dir,homog_dir))
+inner_sq = np.array([i for i in range(len(points))])
+inner_sq = inner_sq[~np.isin(inner_sq, np.concatenate((non_homog_dir,homog_dir)))]
+outer_sq = np.concatenate((non_homog_dir,homog_dir))
+inner_lin = lin_set[np.isin(lin_set,inner_sq)]
+outer_lin = lin_set[np.isin(lin_set,outer_sq)]
+non_homog_lin = lin_set[np.isin(lin_set,non_homog_dir)]
 
+#print(inner_sq)
+#print(outer_sq)
+#print(homog_dir)
+#print(non_homog_dir)
+#print(lin_set)
+
+Ai = A[inner_sq]
+Ai = Ai[:,inner_sq]
+Bx = Bx[lin_set]
+Bx = Bx[:,inner_sq]
+By = By[lin_set]
+By = By[:,inner_sq]
+BxT = Bx.T
+ByT = By.T
+BxT[0] = 0
+ByT[0] = 0
+BxT[:,0] = 0
+ByT[:,0] = 0
+BxT[0,0] = 1
+ByT[0,0] = 1
+
+Gsq = A[inner_sq]
+Gsq = Gsq[:,non_homog_dir]
+Glin = A[lin_set]
+Glin = Glin[:,non_homog_lin]
+
+sq_x = points[non_homog_dir][:,1]
+rgsq = 10*(2**N)*sq_x*(.2-sq_x)
+
+lin_x = points[non_homog_lin][:,1]
+rglin = 10*(2**(N-1))*lin_x*(.2-lin_x)
+
+
+lift_sq = -Gsq@rgsq
+lift_lin = -Glin@rglin
+
+fx = np.zeros_like(lift_sq) - lift_sq
+fy = np.zeros_like(lift_sq)
+fp = np.zeros_like(lift_lin) - lift_lin
+
+rhs = np.concatenate((fx,fy,fp))
+Block = sp.bmat([[Ai,None,-BxT],[None,Ai,-ByT],[Bx,By,None]]).tocsr()
+u_bar = solver(Block,rhs)
+uxinner = u_bar[:len(inner_sq)]
+uyinner = u_bar[len(inner_sq):2*len(inner_sq)]
+pinner = u_bar[2*len(inner_sq)]
+ux = np.zeros(len(points))
+uy = np.zeros(len(points))
+p = np.zeros(len(lin_set))
+ux[inner_sq] = uxinner
+ux[non_homog_dir] += rgsq
+uy[inner_sq] = uyinner
+
+p[1:] = pinner
+p[0] = p[1]
+
+print(p)
+
+print(ux[non_homog_dir])
+print(ux[non_homog_dir + 10])
+print(ux[non_homog_dir + 20])
+
+'''
 G = A
 G = G[:,non_homog_dir]
 
@@ -354,7 +420,6 @@ print(len(ux))
 print(len(uy))
 print(len(p))
 
-'''
 A_inner = A[inner]
 A_inner = A_inner[:,inner]
 C = A[inner]
@@ -411,17 +476,17 @@ lin_pts = points[lin_set]
 tri2 = mtri.Triangulation(lin_pts[:,0],lin_pts[:,1])
 apply_mask(tri2,lin_pts,alpha=0.3/(2**(N-1)))
 
+plt.figure(0)
+plotElements(points,elements)
+for i in range(len(points)):
+    plt.annotate(str(i),points[i])
+plt.axis('scaled')
+plt.savefig("figur0", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
+
 plt.figure(1)
 plt.quiver(points[:,0],points[:,1],ux,uy)
 plt.axis('scaled')
 plt.savefig("figur1", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
-
-#plt.figure(1)
-#plotElements(points,elements)
-#for i in range(len(points)):
-#    plt.annotate(str(i),points[i])
-#plt.axis('scaled')
-#plt.savefig("figur1", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
 
 plt.figure(2)
 
