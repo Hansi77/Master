@@ -282,7 +282,7 @@ def createB(int_func,points,elements):
     return B
 
 #definer området:
-N = 3
+N = 4
 x = np.linspace(0,1,int(5*(2**N)+1))
 y = np.linspace(0,.4,int(2*(2**N)+1))
 X,Y = np.meshgrid(x,y)
@@ -298,11 +298,12 @@ zeta = lambda x,y,c,i: c[i][0] + c[i][1]*x + c[i][2]*y +c[i][3]*x*y
 zeta_dx = lambda x,y,c,i: c[i][1] + c[i][3]*y
 zeta_dy = lambda x,y,c,i: c[i][2] + c[i][3]*x
 
-mu1 = 1
+mu1 = 20
+mu2 = 1
 
 a_bilin = lambda x,y,c,i,j: (1/mu1)*(phi_dx(x,y,c,j)*phi_dx(x,y,c,i) + phi_dy(x,y,c,j)*phi_dy(x,y,c,i))
-b_bilin_x = lambda x,y,c1,c2,i,j: (2**(N+1))*phi_dx(x,y,c2,j)*zeta(x,y,c1,i)
-b_bilin_y = lambda x,y,c1,c2,i,j: (2**(N+1))*phi_dy(x,y,c2,j)*zeta(x,y,c1,i)
+b_bilin_x = lambda x,y,c1,c2,i,j: phi_dx(x,y,c2,j)*zeta(x,y,c1,i)
+b_bilin_y = lambda x,y,c1,c2,i,j: phi_dy(x,y,c2,j)*zeta(x,y,c1,i)
 
 origpts = np.vstack((px,py)).T
 points = origpts[np.logical_or(origpts[:,1] <.20005,np.logical_and(origpts[:,0] > .39995,origpts[:,0] < .60005))]
@@ -347,10 +348,10 @@ Glin = A[lin_set]
 Glin = Glin[:,non_homog_lin]
 
 sq_x = points[non_homog_dir][:,1]
-rgsq = 10*(2**N)*sq_x*(.2-sq_x)
+rgsq = mu2*sq_x*(.2-sq_x)
 
 lin_x = points[non_homog_lin][:,1]
-rglin = 10*(2**(N-1))*lin_x*(.2-lin_x)
+rglin = lin_x*(.2-lin_x)
 
 
 lift_sq = -Gsq@rgsq
@@ -365,22 +366,17 @@ Block = sp.bmat([[Ai,None,-BxT],[None,Ai,-ByT],[Bx,By,None]]).tocsr()
 u_bar = solver(Block,rhs)
 uxinner = u_bar[:len(inner_sq)]
 uyinner = u_bar[len(inner_sq):2*len(inner_sq)]
-pinner = u_bar[2*len(inner_sq)]
+pinner = u_bar[2*len(inner_sq):]
 ux = np.zeros(len(points))
 uy = np.zeros(len(points))
 p = np.zeros(len(lin_set))
 ux[inner_sq] = uxinner
-ux[non_homog_dir] += rgsq
+ux[non_homog_dir] = rgsq
 uy[inner_sq] = uyinner
 
-p[1:] = pinner
-p[0] = p[1]
-
-print(p)
-
-print(ux[non_homog_dir])
-print(ux[non_homog_dir + 10])
-print(ux[non_homog_dir + 20])
+p_lift,junk,junk = boundaries(points,N-1)
+p = pinner
+#p[p_lift] -= rglin
 
 '''
 G = A
@@ -478,14 +474,17 @@ apply_mask(tri2,lin_pts,alpha=0.3/(2**(N-1)))
 
 plt.figure(0)
 plotElements(points,elements)
-for i in range(len(points)):
-    plt.annotate(str(i),points[i])
+#for i in range(len(points)):
+#    plt.annotate(str(i),points[i])
 plt.axis('scaled')
 plt.savefig("figur0", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
 
 plt.figure(1)
-plt.quiver(points[:,0],points[:,1],ux,uy)
+ax1 = plt.tricontourf(tri2,p,levels = 20,cmap = 'rainbow')
+ax2 = plt.tricontour(tri2,p,levels = 20,colors = 'black',linewidths=0.25)
+ax2 = plt.quiver(points[lin_set,0],points[lin_set,1],ux[lin_set],uy[lin_set])
 plt.axis('scaled')
+plt.colorbar(ax1)
 plt.savefig("figur1", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
 
 plt.figure(2)
@@ -505,12 +504,16 @@ plt.colorbar(ax1)
 plt.savefig("figur3", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
 
 plt.figure(4)
+plt.quiver(points[lin_set,0],points[lin_set,1],ux[lin_set],uy[lin_set])
+plt.axis('scaled')
+plt.savefig("figur4", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
 
+plt.figure(5)
 ax1 = plt.tricontourf(tri2,p,levels = 20,cmap = 'rainbow')
 ax2 = plt.tricontour(tri2,p,levels = 20,colors = 'black',linewidths=0.25)
-plt.axis('scaled')
 plt.colorbar(ax1)
-plt.savefig("figur4", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
+plt.axis('scaled')
+plt.savefig("figur5", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
 
 
 plt.close('all')
