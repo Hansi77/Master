@@ -244,6 +244,16 @@ def createLoadStiff(f_int,bilin_int,points,elements,lin_set = 0,basis_type = 'li
     else:
         return u,points
 
+def apply_mask(triang,p, alpha=0.1):
+    # Mask triangles with sidelength bigger some alpha
+    triangles = triang.triangles
+    # Mask off unwanted triangles.
+    xtri = p[triangles,0] - np.roll(p[triangles,0], 1, axis=1)
+    ytri = p[triangles,1] - np.roll(p[triangles,1], 1, axis=1)
+    maxi = np.max(np.sqrt(xtri**2 + ytri**2),axis=1)
+    # apply masking
+    triang.set_mask(maxi > alpha)
+
 def submat(points,el,int_func,multibasis = False):
     if multibasis:
         c1 = phiLin(points,el[0])
@@ -281,6 +291,34 @@ def createB(int_func,points,elements):
                 B[ai,aj] += a_el[i,j]
     return B
 
+def createAlpha(int_func,points,elements):
+    i = 0
+    alpha = np.zeros((len(points)))
+    for el in elements:
+        basis = phiLin(points,el[0])
+        for j,aj in enumerate(el[0]):
+            alpha[aj] += gauss2D(int_func,points,el[1],i,j,c2 = basis)
+    return alpha
+
+def createTest(points,N):
+    i = 0
+    r = 1
+    elements = []
+    lin = []
+    sq = []
+    lin_vec = []
+    while r != (2**N)+1:
+        lin = np.asarray([i,i+2,i+(10*(2**N)+2),i+(10*(2**N)+4)])
+        sq = np.asarray([i,i+1,i+2,i+(5*(2**N)+1),i+(5*(2**N)+2),i+(5*(2**N)+3),i+(10*(2**N)+2),i+(10*(2**N)+3),i+(10*(2**N)+4)])
+        el = [lin,sq]
+        elements.append(el)
+        lin_vec = np.concatenate((lin_vec,lin))
+        i += 2
+        if i==(5*(2**N))*r + r -1:
+            i += 5*(2**N) +2
+            r += 2
+    return elements, np.array(list(set(lin_vec)),dtype=int)
+
 #definer området:
 N = 4
 x = np.linspace(0,1,int(5*(2**N)+1))
@@ -298,12 +336,13 @@ zeta = lambda x,y,c,i: c[i][0] + c[i][1]*x + c[i][2]*y +c[i][3]*x*y
 zeta_dx = lambda x,y,c,i: c[i][1] + c[i][3]*y
 zeta_dy = lambda x,y,c,i: c[i][2] + c[i][3]*x
 
-mu1 = 20
-mu2 = 1
+mu1 = 1
+mu2 = 100
 
 a_bilin = lambda x,y,c,i,j: (1/mu1)*(phi_dx(x,y,c,j)*phi_dx(x,y,c,i) + phi_dy(x,y,c,j)*phi_dy(x,y,c,i))
-b_bilin_x = lambda x,y,c1,c2,i,j: phi_dx(x,y,c2,j)*zeta(x,y,c1,i)
-b_bilin_y = lambda x,y,c1,c2,i,j: phi_dy(x,y,c2,j)*zeta(x,y,c1,i)
+b_bilin_x = lambda x,y,c1,c2,i,j: -phi_dx(x,y,c2,j)*zeta(x,y,c1,i)
+b_bilin_y = lambda x,y,c1,c2,i,j: -phi_dy(x,y,c2,j)*zeta(x,y,c1,i)
+alpha_int = lambda x,y,c,i,j: zeta(x,y,c,j)
 
 origpts = np.vstack((px,py)).T
 points = origpts[np.logical_or(origpts[:,1] <.20005,np.logical_and(origpts[:,0] > .39995,origpts[:,0] < .60005))]
@@ -311,8 +350,11 @@ elements,lin_set = hoodTaylor(points,N)
 non_homog_dir,homog_dir,neumann = boundaries(points,N)
 
 A = createA(a_bilin,points,elements)
-Bx = createB(b_bilin_x,points,elements)
-By = createB(b_bilin_y,points,elements)
+Dx = createB(b_bilin_x,points,elements)
+Dy = createB(b_bilin_y,points,elements)
+alpha = createAlpha(alpha_int,points,elements)
+alpha = alpha[lin_set]
+gamma = -alpha[1:]/alpha[0]
 
 inner_sq = np.array([i for i in range(len(points))])
 inner_sq = inner_sq[~np.isin(inner_sq, np.concatenate((non_homog_dir,homog_dir)))]
@@ -321,49 +363,71 @@ inner_lin = lin_set[np.isin(lin_set,inner_sq)]
 outer_lin = lin_set[np.isin(lin_set,outer_sq)]
 non_homog_lin = lin_set[np.isin(lin_set,non_homog_dir)]
 
-#print(inner_sq)
-#print(outer_sq)
-#print(homog_dir)
-#print(non_homog_dir)
-#print(lin_set)
-
 Ai = A[inner_sq]
 Ai = Ai[:,inner_sq]
-Bx = Bx[lin_set]
-Bx = Bx[:,inner_sq]
-By = By[lin_set]
-By = By[:,inner_sq]
-BxT = Bx.T
-ByT = By.T
-BxT[0] = 0
-ByT[0] = 0
-BxT[:,0] = 0
-ByT[:,0] = 0
-BxT[0,0] = 1
-ByT[0,0] = 1
+Dx = Dx[lin_set]
+Gx = Dx[:,non_homog_lin]
+Dx = Dx[:,inner_sq]
+Dy = Dy[lin_set]
+Gy = Dy[:,non_homog_lin]
+Dy = Dy[:,inner_sq]
+DxT = Dx.T
+DyT = Dy.T
+T = sp.identity(2*len(inner_sq)+len(lin_set)-1).tocsc()
+T1 = T[:2*len(inner_sq)]
+T2 = T[2*len(inner_sq):]
+T3 = np.zeros(2*len(inner_sq)+len(lin_set)-1)
+T3[2*len(inner_sq):] = gamma
+T = sp.vstack((T1,T3,T2))
+#Dxi = Dx[1:]
+#Dyi = Dy[1:]
+#Dxi[0] += Dx[0]
+#Dyi[0] += Dy[0]
 
-Gsq = A[inner_sq]
-Gsq = Gsq[:,non_homog_dir]
-Glin = A[lin_set]
-Glin = Glin[:,non_homog_lin]
+G = A[inner_sq]
+G = G[:,non_homog_dir]
+
+#matrisemodifikasjoner
+
+#DxTi = DxT[:,1:]
+#print(100*np.round(DxTi.todense(),2))
+#temp = np.outer(DxT[:,0].todense(),gamma)
+#print(100*np.round(temp,2))
+#DxTi += temp
+#print(100*np.round(DxTi.todense(),2))
+#DxTi[:,0] = 0
+#DxTi[0,0] = 1
+
+#DyTi = DyT[:,1:]
+#temp2 = np.outer(DyT[:,0].todense(),gamma)
+# DyTi += temp2
+#DyTi[:,0] = 0
+#DyTi[0,0] = 1
+
+#print(100*np.round(DxTi.todense(),2))
+#print(100*np.round(DyTi.todense(),2))
 
 sq_x = points[non_homog_dir][:,1]
 rgsq = mu2*sq_x*(.2-sq_x)
 
 lin_x = points[non_homog_lin][:,1]
-rglin = lin_x*(.2-lin_x)
+rglin = mu2*lin_x*(.2-lin_x)
 
-
-lift_sq = -Gsq@rgsq
-lift_lin = -Glin@rglin
+lift_sq = G@rgsq
+lift_lin = Gx@rglin + Gy@rglin
 
 fx = np.zeros_like(lift_sq) - lift_sq
 fy = np.zeros_like(lift_sq)
 fp = np.zeros_like(lift_lin) - lift_lin
+#fp = fpi[1:]
+#fp[0] += fpi[0]
 
 rhs = np.concatenate((fx,fy,fp))
-Block = sp.bmat([[Ai,None,-BxT],[None,Ai,-ByT],[Bx,By,None]]).tocsr()
+rhs = rhs
+Block = sp.bmat([[Ai,None,DxT],[None,Ai,DyT],[Dx,Dy,None]]).tocsr()
+Block = Block
 u_bar = solver(Block,rhs)
+u_bar = u_bar
 uxinner = u_bar[:len(inner_sq)]
 uyinner = u_bar[len(inner_sq):2*len(inner_sq)]
 pinner = u_bar[2*len(inner_sq):]
@@ -373,98 +437,23 @@ p = np.zeros(len(lin_set))
 ux[inner_sq] = uxinner
 ux[non_homog_dir] = rgsq
 uy[inner_sq] = uyinner
-
-p_lift,junk,junk = boundaries(points,N-1)
 p = pinner
-#p[p_lift] -= rglin
 
-'''
-G = A
-G = G[:,non_homog_dir]
+print(ux[non_homog_dir])
+print(ux[non_homog_dir+1])
 
-A[outer] = 0
-A[:,outer] = 0
-A[outer,outer] = 1
-Bx[outer] = 0
-By[outer] = 0
-Bx[:,outer] = 0
-By[:,outer] = 0
-Bx[outer,outer] = 1
-By[outer,outer] = 1
+plt.figure(10)
+exx = np.linspace(0,1,len(ux[non_homog_dir]))
+plt.plot(exx,ux[non_homog_dir])
+plt.savefig("hastighetsprofil.png")
 
-rg = np.zeros_like(non_homog_dir)
-rg_x = points[non_homog_dir][:,1]
-rg[:] = 20000*rg_x*(.2-rg_x)
 
-g = -G@rg
-fx = np.zeros_like(g) + g
-fy = np.zeros_like(g)
-zero = np.zeros_like(lin_set)
-Bx = Bx[lin_set]
-By = By[lin_set]
+#p[1:] = pinner
 
-Block = sp.bmat([[A,None,Bx.T],[None,A,By.T],[-Bx,-By,None]]).tocsr()
-rhs = np.concatenate((fx,fy,zero))
-u_bar = solver(Block,rhs)
-ux = u_bar[:len(points)]
-ux[non_homog_dir] += rg
-uy = u_bar[len(points):2*len(points)]
-uy[non_homog_dir] = 0
-p = u_bar[2*len(points):]
-
-print(len(ux))
-print(len(uy))
-print(len(p))
-
-A_inner = A[inner]
-A_inner = A_inner[:,inner]
-C = A[inner]
-C = C[:,outer]
-
-rg_homo = np.zeros_like(homog_dir)
-rg_non_homo = np.zeros_like(non_homog_dir)
-rgy = points[non_homog_dir][:,1]
-rg_non_homo[:] = 2000*rgy*(.2-rgy)
-rg = np.concatenate((rg_non_homo,rg_homo))
-
-rhs_x = - C@rg
-
-Bx = Bx[lin_set]
-Bx = Bx[:,inner]
-By = By[lin_set]
-By = By[:,inner]
-
-Giant = sp.bmat([[A_inner,None,Bx.T],[None,A_inner,By.T],[-Bx,-By,None]])
-Giant = Giant.tocsr()
-rhs = np.zeros_like(np.concatenate((rhs_x,lin_set)))
-rhs = np.concatenate((rhs_x,rhs))
-
-u_bar = solver(Giant,rhs)
-
-ux = np.zeros((len(points)))
-ux[inner] = u_bar[:len(inner)]
-ux[outer] = rg
-uy = np.zeros((len(points)))
-uy[inner] = u_bar[len(inner):2*len(inner)]
-p = np.zeros_like(lin_set)
-p = u_bar[2*len(inner):]
-'''
-
-#if basis_type == 'lin':
-#    u,pts = createLoadStiff(f_lin,bilin_lin,points,elements,lin_set,basis_type=basis_type)
-#else:
-#    u,pts = createLoadStiff(f_sq,bilin_sq,points,elements,lin_set,basis_type=basis_type)
-#
-
-def apply_mask(triang,p, alpha=0.1):
-    # Mask triangles with sidelength bigger some alpha
-    triangles = triang.triangles
-    # Mask off unwanted triangles.
-    xtri = p[triangles,0] - np.roll(p[triangles,0], 1, axis=1)
-    ytri = p[triangles,1] - np.roll(p[triangles,1], 1, axis=1)
-    maxi = np.max(np.sqrt(xtri**2 + ytri**2),axis=1)
-    # apply masking
-    triang.set_mask(maxi > alpha)
+#p[0] = np.dot(alpha[1:],p[1:])
+print(np.dot(alpha,p))
+#print(ux[non_homog_dir])
+#print(p)
 
 tri1 = mtri.Triangulation(points[:,0],points[:,1])
 apply_mask(tri1,points,alpha = 0.3/(2**N))
