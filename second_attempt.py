@@ -367,6 +367,11 @@ def createDomain(N,typ = 0):
         points = origpts[np.logical_or(np.logical_and(origpts[:,1] <.20005,origpts[:,0] < .60005),np.logical_and(np.logical_and(origpts[:,0] > .39995,origpts[:,0] < .60005),origpts[:,1]<.60005))]
         elements,lin_set = typeThreeDom(points,N)
         non_homog_dir,homog_dir,neumann = typeThreeBdry(points,N)
+    elif typ == 4:
+        points = origpts[np.logical_or(np.logical_and(origpts[:,1] <.20005,origpts[:,0] < .60005),np.logical_and(np.logical_and(origpts[:,0] > .39995,origpts[:,0] < .60005),origpts[:,1]<.60005))]
+        points = np.vstack((-points[:,1]+.6,points[:,0]-.4)).T
+        elements,lin_set = typeThreeDom(points,N)
+        neumann,homog_dir,non_homog_dir = typeThreeBdry(points,N)
     #definerer indre noder
     inner = np.array([i for i in range(len(points))])
     inner = inner[~np.isin(inner, np.concatenate((non_homog_dir,homog_dir)))]
@@ -422,8 +427,8 @@ def quiverPlotter(ux,uy,points,title = "title",fname = "filename",newfig = True,
 
 
 #variabler, mu1 er amplitude på hastighetsprofil, mu2 er dynamsik viskositet
-mu1 = 10
-mu2 = 100
+mu1 = 1
+mu2 = 10 
 
 #definerer basisfunksjoner
 phi = lambda x,y,c,i: c[i][0] + c[i][1]*x + c[i][2]*y + c[i][3]*x*y + c[i][4]*(x**2) + c[i][5]*(y**2) + c[i][6]*(x**2)*y + c[i][7]*x*(y**2) +c[i][8]*(x**2)*(y**2)
@@ -441,7 +446,7 @@ b_bilin_y = lambda x,y,c1,c2,i,j: -phi_dy(x,y,c2,j)*zeta(x,y,c1,i)
 #generer noder, elementer, kanter og indre noder
 N = 4
 #type domene
-typ = 3
+typ = 4
 points,elements,lin_set,non_homog,homog,neu,inner = createDomain(N,typ)
 
 #bygger stivhets- og divergensmatrisene
@@ -471,12 +476,12 @@ Block = sp.bmat([[Ai,None,Dxi.T],[None,Ai,Dyi.T],[Dxi,Dyi,None]]).tocsr()
 u_bar = solver(Block,rhs)
 ux,uy,p = solHelper(u_bar,rg,inner,points)
 
-print("total out massflow")
+print("total out volumeflow")
 if typ == 2:
     print(sum(np.sqrt(ux[neu]**2 + uy[neu]**2))/len(neu)*.4)
 else:
     print(sum(np.sqrt(ux[neu]**2 + uy[neu]**2))/len(neu)*.2)
-print("total in massflow")
+print("total in volumeflow")
 print(sum(np.sqrt(ux[non_homog]**2 + uy[non_homog]**2))/len(non_homog)*.2)
 
 #generer triangulering og maskerer for enklere plotting 
