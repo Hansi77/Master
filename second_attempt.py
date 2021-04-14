@@ -42,7 +42,7 @@ def plotEdges(inputEdge,p):
         connectPoints(p[int(edge[0])],p[int(edge[1])],color = 'r') 
 
 def boundaries(points,N):
-    non_homo_dir = [i*(5*(2**N)+1) for i in range(1,2**N)]
+    non_homo_dir = [i*(5*(2**N)+1) for i in range(1,(2**N))]
     homo_dir1 = [i for i in range(5*(2**N)+1)]
     homo_dir2 = [i for i in range((2**N)*(5*(2**N)+1),(2**N)*(5*(2**N)+1)+2*(2**N)+1)]
     homo_dir3 = [i for i in range((2**N)*(5*(2**N)+1)+3*(2**N),(2**N)*(5*(2**N)+1)+5*(2**N)+1)]
@@ -282,7 +282,7 @@ def createA(int_func,points,elements):
                     A[ai,aj] += a_el[i,j]
     return A
     
-def createB(int_func,points,elements):
+def createD(int_func,points,elements):
     B = sp.lil_matrix((len(points),len(points)))
     for el in elements:
         a_el = submat(points,el,int_func,multibasis=True)
@@ -319,6 +319,17 @@ def createTest(points,N):
             r += 2
     return elements, np.array(list(set(lin_vec)),dtype=int)
 
+def createDomain(N):
+    x = np.linspace(0,1,int(5*(2**N)+1))
+    y = np.linspace(0,.4,int(2*(2**N)+1))
+    X,Y = np.meshgrid(x,y)
+
+    px = X.ravel()
+    py = Y.ravel()
+    origpts = np.vstack((px,py)).T
+    points = origpts[np.logical_or(origpts[:,1] <.20005,np.logical_and(origpts[:,0] > .39995,origpts[:,0] < .60005))]
+    return points
+
 #definer området:
 N = 4
 x = np.linspace(0,1,int(5*(2**N)+1))
@@ -336,7 +347,7 @@ zeta = lambda x,y,c,i: c[i][0] + c[i][1]*x + c[i][2]*y +c[i][3]*x*y
 zeta_dx = lambda x,y,c,i: c[i][1] + c[i][3]*y
 zeta_dy = lambda x,y,c,i: c[i][2] + c[i][3]*x
 
-mu1 = 1
+mu1 = 10
 mu2 = 100
 
 a_bilin = lambda x,y,c,i,j: (1/mu1)*(phi_dx(x,y,c,j)*phi_dx(x,y,c,i) + phi_dy(x,y,c,j)*phi_dy(x,y,c,i))
@@ -350,11 +361,11 @@ elements,lin_set = hoodTaylor(points,N)
 non_homog_dir,homog_dir,neumann = boundaries(points,N)
 
 A = createA(a_bilin,points,elements)
-Dx = createB(b_bilin_x,points,elements)
-Dy = createB(b_bilin_y,points,elements)
+Dx = createD(b_bilin_x,points,elements)
+Dy = createD(b_bilin_y,points,elements)
+
 alpha = createAlpha(alpha_int,points,elements)
 alpha = alpha[lin_set]
-gamma = -alpha[1:]/alpha[0]
 
 inner_sq = np.array([i for i in range(len(points))])
 inner_sq = inner_sq[~np.isin(inner_sq, np.concatenate((non_homog_dir,homog_dir)))]
@@ -363,71 +374,35 @@ inner_lin = lin_set[np.isin(lin_set,inner_sq)]
 outer_lin = lin_set[np.isin(lin_set,outer_sq)]
 non_homog_lin = lin_set[np.isin(lin_set,non_homog_dir)]
 
+#grenser for trykkrommet:
+
 Ai = A[inner_sq]
 Ai = Ai[:,inner_sq]
 Dx = Dx[lin_set]
-Gx = Dx[:,non_homog_lin]
+Gx = Dx[:,non_homog_dir]
 Dx = Dx[:,inner_sq]
 Dy = Dy[lin_set]
-Gy = Dy[:,non_homog_lin]
+Gy = Dy[:,non_homog_dir]
 Dy = Dy[:,inner_sq]
 DxT = Dx.T
 DyT = Dy.T
-T = sp.identity(2*len(inner_sq)+len(lin_set)-1).tocsc()
-T1 = T[:2*len(inner_sq)]
-T2 = T[2*len(inner_sq):]
-T3 = np.zeros(2*len(inner_sq)+len(lin_set)-1)
-T3[2*len(inner_sq):] = gamma
-T = sp.vstack((T1,T3,T2))
-#Dxi = Dx[1:]
-#Dyi = Dy[1:]
-#Dxi[0] += Dx[0]
-#Dyi[0] += Dy[0]
 
 G = A[inner_sq]
 G = G[:,non_homog_dir]
 
-#matrisemodifikasjoner
-
-#DxTi = DxT[:,1:]
-#print(100*np.round(DxTi.todense(),2))
-#temp = np.outer(DxT[:,0].todense(),gamma)
-#print(100*np.round(temp,2))
-#DxTi += temp
-#print(100*np.round(DxTi.todense(),2))
-#DxTi[:,0] = 0
-#DxTi[0,0] = 1
-
-#DyTi = DyT[:,1:]
-#temp2 = np.outer(DyT[:,0].todense(),gamma)
-# DyTi += temp2
-#DyTi[:,0] = 0
-#DyTi[0,0] = 1
-
-#print(100*np.round(DxTi.todense(),2))
-#print(100*np.round(DyTi.todense(),2))
-
 sq_x = points[non_homog_dir][:,1]
 rgsq = mu2*sq_x*(.2-sq_x)
 
-lin_x = points[non_homog_lin][:,1]
-rglin = mu2*lin_x*(.2-lin_x)
-
 lift_sq = G@rgsq
-lift_lin = Gx@rglin + Gy@rglin
+lift_lin = Gx@rgsq
 
-fx = np.zeros_like(lift_sq) - lift_sq
+fx = np.zeros_like(lift_sq) - lift_sq 
 fy = np.zeros_like(lift_sq)
 fp = np.zeros_like(lift_lin) - lift_lin
-#fp = fpi[1:]
-#fp[0] += fpi[0]
 
 rhs = np.concatenate((fx,fy,fp))
-rhs = rhs
 Block = sp.bmat([[Ai,None,DxT],[None,Ai,DyT],[Dx,Dy,None]]).tocsr()
-Block = Block
 u_bar = solver(Block,rhs)
-u_bar = u_bar
 uxinner = u_bar[:len(inner_sq)]
 uyinner = u_bar[len(inner_sq):2*len(inner_sq)]
 pinner = u_bar[2*len(inner_sq):]
@@ -439,21 +414,20 @@ ux[non_homog_dir] = rgsq
 uy[inner_sq] = uyinner
 p = pinner
 
-print(ux[non_homog_dir])
-print(ux[non_homog_dir+1])
-
 plt.figure(10)
 exx = np.linspace(0,1,len(ux[non_homog_dir]))
 plt.plot(exx,ux[non_homog_dir])
 plt.savefig("hastighetsprofil.png")
 
-
 #p[1:] = pinner
 
 #p[0] = np.dot(alpha[1:],p[1:])
-print(np.dot(alpha,p))
-#print(ux[non_homog_dir])
-#print(p)
+#print(np.dot(alpha,p))
+print("average out velocity (x)")
+print(sum(ux[non_homog_dir-1])/len(ux[non_homog_dir-1]))
+print("average in velocity (x)")
+print(sum(ux[non_homog_dir])/len(ux[non_homog_dir]))
+
 
 tri1 = mtri.Triangulation(points[:,0],points[:,1])
 apply_mask(tri1,points,alpha = 0.3/(2**N))
@@ -493,7 +467,7 @@ plt.colorbar(ax1)
 plt.savefig("figur3", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
 
 plt.figure(4)
-plt.quiver(points[lin_set,0],points[lin_set,1],ux[lin_set],uy[lin_set])
+plt.quiver(points[:,0],points[:,1],ux,uy)
 plt.axis('scaled')
 plt.savefig("figur4", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
 
