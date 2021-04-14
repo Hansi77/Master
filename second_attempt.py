@@ -70,7 +70,7 @@ def typeZeroBdry(points,N):
     homo_neu = [i*(5*(2**N)+1)-1 for i in range(2,2**N+1)]
     return np.asarray(non_homo_dir),np.asarray( np.concatenate((homo_dir1,homo_dir2))),np.asarray(homo_neu)
 
-#rør med utstikker
+#rør med utstikker, lukket
 def typeOneBdry(points,N):
     non_homo_dir = [i*(5*(2**N)+1) for i in range(1,(2**N))]
     homo_dir1 = [i for i in range(5*(2**N)+1)]
@@ -128,6 +128,112 @@ def typeOneDom(points,N):
                 r += 2
                 ti = i
     return elements, np.array(list(set(lin_vec)),dtype=int)
+
+#rør med utstikker, åpen
+def typeTwoBdry(points,N):
+    non_homo_dir = [i*(5*(2**N)+1) for i in range(1,(2**N))]
+    homo_dir1 = [i for i in range(5*(2**N)+1)]
+    homo_dir2 = [i for i in range((2**N)*(5*(2**N)+1),(2**N)*(5*(2**N)+1)+2*(2**N)+1)]
+    homo_dir3 = [i for i in range((2**N)*(5*(2**N)+1)+3*(2**N),(2**N)*(5*(2**N)+1)+5*(2**N)+1)]
+    homo_dir4 = [(2**N +1)*(5*(2**N)+1)+i*((2**N)+1) for i in range(2*(2**N))]
+    homo_dir5 = [(2**N +1)*(5*(2**N)+1)+i*((2**N)+1)-1 for i in range(1,2*(2**N)+1)]
+    homo_neu2 = [i for i in range(len(points)-(2**N),len(points)-1)]
+    homo_dir = np.concatenate((homo_dir1,homo_dir2,homo_dir3,homo_dir4,homo_dir5))
+    homo_neu1 = [i*(5*(2**N)+1)-1 for i in range(2,2**N+1)]
+    homo_neu = np.concatenate((homo_neu1,homo_neu2))
+    return np.asarray(non_homo_dir), np.asarray(np.sort(homo_dir)), np.asarray(homo_neu)
+
+def typeTwoDom(points,N):
+    i = 0
+    r = 1
+    elements = []
+    lin = []
+    sq = []
+    lin_vec = []
+    while r != (2**N)+1:
+        lin = np.asarray([i,i+2,i+(10*(2**N)+2),i+(10*(2**N)+4)])
+        sq = np.asarray([i,i+1,i+2,i+(5*(2**N)+1),i+(5*(2**N)+2),i+(5*(2**N)+3),i+(10*(2**N)+2),i+(10*(2**N)+3),i+(10*(2**N)+4)])
+        el = [lin,sq]
+        elements.append(el)
+        lin_vec = np.concatenate((lin_vec,lin))
+        i += 2
+        if i==(5*(2**N))*r + r -1:
+            i += 5*(2**N) +2
+            r += 2
+
+    r = 1
+    i += 2*(2**N)
+    ti = i
+    while r != 2*(2**N) +1:
+        if r == 1:
+            lin = np.asarray([i,i+2,i+4*(2**N)+2,i+4*(2**N)+4])
+            sq = np.asarray([i, i+1,i+2,i+3*(2**N)+1,i+3*(2**N)+2,i+3*(2**N)+3,i+4*(2**N)+2,i+4*(2**N)+3,i+4*(2**N)+4])
+            el = [lin,sq]
+            elements.append(el)
+            lin_vec = np.concatenate((lin_vec,lin))
+        else:
+            lin = np.asarray([i,i+2,i+2*(2**N)+2,i+2*(2**N)+4])
+            sq = np.asarray([i,i+1,i+2,i+(2**N)+1,i+(2**N)+2,i+(2**N)+3,i+2*(2**N)+2,i+2*(2**N)+3,i+2*(2**N)+4])
+            el = [lin,sq]
+            elements.append(el)
+            lin_vec = np.concatenate((lin_vec,lin))
+        i += 2
+        if i == ti + (2**N):
+            if r == 1:
+                i += 3*(2**N)+2
+                r += 2
+                ti = i
+            else:
+                i += (2**N)+2
+                r += 2
+                ti = i
+    return elements, np.array(list(set(lin_vec)),dtype=int)
+
+#hjørnerør
+def typeThreeBdry(points,N):
+    non_homo_dir = [i*(3*(2**N)+1) for i in range(1,(2**N))]
+    homo_dir1 = [i for i in range(3*(2**N)+1)]
+    homo_dir2 = [i for i in range((2**N)*(3*(2**N)+1),(2**N)*(3*(2**N)+1)+2*(2**N)+1)]
+    homo_dir3 = [(2**N +1)*(3*(2**N)+1)+i*((2**N)+1) for i in range(2*(2**N))]
+    homo_dir4 = [(2**N +1)*(3*(2**N)+1)+i*((2**N)+1)-1 for i in range(2*(2**N)+1)]
+    homo_dir5 = [i*(3*(2**N)+1)-1 for i in range(2,2**N+1)]
+    homo_dir = np.concatenate((homo_dir1,homo_dir2,homo_dir3,homo_dir4,homo_dir5))
+    homo_neu = [i for i in range(len(points)-(2**N),len(points)-1)]
+    return np.asarray(non_homo_dir), np.asarray(np.sort(homo_dir)), np.asarray(homo_neu)
+
+def typeThreeDom(points,N):
+    i = 0
+    r = 1
+    elements = []
+    lin = []
+    sq = []
+    lin_vec = []
+    while r != (2**N)+1:
+        lin = np.asarray([i,i+2,i+(6*(2**N)+2),i+(6*(2**N)+4)])
+        sq = np.asarray([i,i+1,i+2,i+(3*(2**N)+1),i+(3*(2**N)+2),i+(3*(2**N)+3),i+(6*(2**N)+2),i+(6*(2**N)+3),i+(6*(2**N)+4)])
+        el = [lin,sq]
+        elements.append(el)
+        lin_vec = np.concatenate((lin_vec,lin))
+        i += 2
+        if i==(3*(2**N))*r + r -1:
+            i += 3*(2**N) +2
+            r += 2
+    r = 1
+    i += 2*(2**N)
+    ti = i
+    while r != 2*(2**N) +1:
+        lin = np.asarray([i,i+2,i+2*(2**N)+2,i+2*(2**N)+4])
+        sq = np.asarray([i,i+1,i+2,i+(2**N)+1,i+(2**N)+2,i+(2**N)+3,i+2*(2**N)+2,i+2*(2**N)+3,i+2*(2**N)+4])
+        el = [lin,sq]
+        elements.append(el)
+        lin_vec = np.concatenate((lin_vec,lin))
+        i += 2
+        if i == ti + (2**N):
+            i += (2**N)+2
+            r += 2
+            ti = i
+    return elements, np.array(list(set(lin_vec)),dtype=int)
+
 
 #returnerer koeffisientene til de bikvadratiske basisfunksjonene
 def phiSq(points,el):
@@ -236,6 +342,7 @@ def createD(int_func,points,elements):
                 B[ai,aj] += a_el[i,j]
     return B
 
+#samlefunksjon for å genere Noder, elementer, kanter og indre noder, gitt type domene
 def createDomain(N,typ = 0):
     x = np.linspace(0,1,int(5*(2**N)+1))
     y = np.linspace(0,1,int(5*(2**N)+1))
@@ -252,7 +359,18 @@ def createDomain(N,typ = 0):
         points = origpts[np.logical_or(origpts[:,1] <.20005,np.logical_and(np.logical_and(origpts[:,0] > .39995,origpts[:,0] < .60005),origpts[:,1]<.40005))]
         elements,lin_set = typeOneDom(points,N)
         non_homog_dir,homog_dir,neumann = typeOneBdry(points,N)
-    return points,elements,lin_set,non_homog_dir,homog_dir, neumann
+    elif typ == 2:
+        points = origpts[np.logical_or(origpts[:,1] <.20005,np.logical_and(np.logical_and(origpts[:,0] > .39995,origpts[:,0] < .60005),origpts[:,1]<.60005))]
+        elements,lin_set = typeTwoDom(points,N)
+        non_homog_dir,homog_dir,neumann = typeTwoBdry(points,N)
+    elif typ == 3:
+        points = origpts[np.logical_or(np.logical_and(origpts[:,1] <.20005,origpts[:,0] < .60005),np.logical_and(np.logical_and(origpts[:,0] > .39995,origpts[:,0] < .60005),origpts[:,1]<.60005))]
+        elements,lin_set = typeThreeDom(points,N)
+        non_homog_dir,homog_dir,neumann = typeThreeBdry(points,N)
+    #definerer indre noder
+    inner = np.array([i for i in range(len(points))])
+    inner = inner[~np.isin(inner, np.concatenate((non_homog_dir,homog_dir)))]
+    return points,elements,lin_set,non_homog_dir,homog_dir, neumann,inner
 
 #fjerner ønskede rader og kolonner fra inputmatrisa
 def matrixShaver(Mat,rows,cols):
@@ -260,6 +378,7 @@ def matrixShaver(Mat,rows,cols):
     Out = Out[:,cols]
     return Out
 
+#hjelpefunksjon
 def solHelper(sol,lift,inner,points):
     uxinner = sol[:len(inner)]
     uyinner = sol[len(inner):2*len(inner)]
@@ -271,6 +390,7 @@ def solHelper(sol,lift,inner,points):
     uy[inner] = uyinner
     return ux,uy,p
 
+#hjelpefunksjon
 def plotHelp(points,lin_set,N):
     tri1 = mtri.Triangulation(points[:,0],points[:,1])
     apply_mask(tri1,points,alpha = 0.3/(2**N))
@@ -278,6 +398,28 @@ def plotHelp(points,lin_set,N):
     tri2 = mtri.Triangulation(lin_pts[:,0],lin_pts[:,1])
     apply_mask(tri2,lin_pts,alpha=0.3/(2**(N-1)))
     return tri1,tri2
+
+#plottefunksjoner
+def contourPlotter(u,tri,title = "title",fname = "filename",newfig = True,save = True):
+    if newfig:
+        plt.figure()
+        plt.title(title)
+    ax1 = plt.tricontourf(tri,u,levels = 20,cmap = 'rainbow')
+    ax2 = plt.tricontour(tri,u,levels = 20,colors = 'black',linewidths=0.25)
+    plt.axis('scaled')
+    plt.colorbar(ax1)
+    if save:
+        plt.savefig(fname, dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
+
+def quiverPlotter(ux,uy,points,title = "title",fname = "filename",newfig = True, save = True):
+    if newfig:
+        plt.figure()
+        plt.title(title)
+    ax2 = plt.quiver(points[:,0],points[:,1],ux,uy)
+    plt.axis('scaled')
+    if save:
+        plt.savefig(fname, dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
+
 
 #variabler, mu1 er amplitude på hastighetsprofil, mu2 er dynamsik viskositet
 mu1 = 10
@@ -296,17 +438,20 @@ a_bilin = lambda x,y,c,i,j: (1/mu1)*(phi_dx(x,y,c,j)*phi_dx(x,y,c,i) + phi_dy(x,
 b_bilin_x = lambda x,y,c1,c2,i,j: -phi_dx(x,y,c2,j)*zeta(x,y,c1,i)
 b_bilin_y = lambda x,y,c1,c2,i,j: -phi_dy(x,y,c2,j)*zeta(x,y,c1,i)
 
-#bygger likningssystemet
+#generer noder, elementer, kanter og indre noder
 N = 4
-points,elements,lin_set,non_homog,homog,neu = createDomain(N,typ=0)
+#type domene
+typ = 3
+points,elements,lin_set,non_homog,homog,neu,inner = createDomain(N,typ)
 
+#bygger stivhets- og divergensmatrisene
 A = createA(a_bilin,points,elements)
 Dx = createD(b_bilin_x,points,elements)
 Dy = createD(b_bilin_y,points,elements)
 
-#definerer indre noder
-inner = np.array([i for i in range(len(points))])
-inner = inner[~np.isin(inner, np.concatenate((non_homog,homog)))]
+#definerer lifting-funksjonen
+y_n = points[non_homog][:,1]
+rg = mu2*y_n*(.2-y_n)
 
 #fjerner nødvendige rader og kollonner
 Ai = matrixShaver(A,inner,inner)
@@ -314,10 +459,6 @@ Dxi = matrixShaver(Dx,lin_set,inner)
 Dyi = matrixShaver(Dy,lin_set,inner)
 Gx = matrixShaver(Dx,lin_set,non_homog)
 G = matrixShaver(A,inner,non_homog)
-
-#definerer lifting-funksjonen
-y_n = points[non_homog][:,1]
-rg = mu2*y_n*(.2-y_n)
 
 #lager høyresiden
 fx = -G@rg
@@ -330,56 +471,35 @@ Block = sp.bmat([[Ai,None,Dxi.T],[None,Ai,Dyi.T],[Dxi,Dyi,None]]).tocsr()
 u_bar = solver(Block,rhs)
 ux,uy,p = solHelper(u_bar,rg,inner,points)
 
-print("average out velocity (x)")
-print(sum(ux[neu])/len(ux[neu]))
-print("average in velocity (x)")
-print(sum(ux[non_homog])/len(ux[non_homog]))
+print("total out massflow")
+if typ == 2:
+    print(sum(np.sqrt(ux[neu]**2 + uy[neu]**2))/len(neu)*.4)
+else:
+    print(sum(np.sqrt(ux[neu]**2 + uy[neu]**2))/len(neu)*.2)
+print("total in massflow")
+print(sum(np.sqrt(ux[non_homog]**2 + uy[non_homog]**2))/len(non_homog)*.2)
 
 #generer triangulering og maskerer for enklere plotting 
 tri1,tri2 = plotHelp(points,lin_set,N)
 
-plt.figure(0)
+#figur 0, domene
+plt.figure()
 plotElements(points,elements)
-#for i in range(len(points)):
-#    plt.annotate(str(i),points[i])
+plt.title('Domain w/bilinear and biquadratic elements')
 plt.axis('scaled')
-plt.savefig("figur0", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
-
-plt.figure(1)
-ax1 = plt.tricontourf(tri2,p,levels = 20,cmap = 'rainbow')
-ax2 = plt.tricontour(tri2,p,levels = 20,colors = 'black',linewidths=0.25)
-ax2 = plt.quiver(points[lin_set,0],points[lin_set,1],ux[lin_set],uy[lin_set])
-plt.axis('scaled')
-plt.colorbar(ax1)
-plt.savefig("figur1", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
-
-plt.figure(2)
-
-ax1 = plt.tricontourf(tri1,ux,levels = 20,cmap = 'rainbow')
-ax2 = plt.tricontour(tri1,ux,levels = 20,colors = 'black',linewidths=0.25)
-plt.axis('scaled')
-plt.colorbar(ax1)
-plt.savefig("figur2", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
-
-plt.figure(3)
-
-ax1 = plt.tricontourf(tri1,uy,levels = 20,cmap = 'rainbow')
-ax2 = plt.tricontour(tri1,uy,levels = 20,colors = 'black',linewidths=0.25)
-plt.axis('scaled')
-plt.colorbar(ax1)
-plt.savefig("figur3", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
-
-plt.figure(4)
-plt.quiver(points[:,0],points[:,1],ux,uy)
-plt.axis('scaled')
-plt.savefig("figur4", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
-
-plt.figure(5)
-ax1 = plt.tricontourf(tri2,p,levels = 20,cmap = 'rainbow')
-ax2 = plt.tricontour(tri2,p,levels = 20,colors = 'black',linewidths=0.25)
-plt.colorbar(ax1)
-plt.axis('scaled')
-plt.savefig("figur5", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
-
+plt.savefig("figur0_type"+str(typ), dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
+#figur1, hastighetsfelt og trykk
+contourPlotter(p,tri2,title = "Velocity and pressure",save = False)
+quiverPlotter(ux[lin_set],uy[lin_set],points[lin_set],fname="figur1_type"+str(typ), newfig = False)
+#figur2, x-hastighet
+contourPlotter(ux,tri1,title="x-velocity, $u_x$",fname="figur2_type"+str(typ))
+#figur3, y-hastighet
+contourPlotter(uy,tri1,title="y-velocity, $u_y$",fname="figur3_type"+str(typ))
+#figur4, hastighetsmagnitude
+contourPlotter(np.sqrt(ux**2 + uy**2),tri1,title="Velocity-magnitude, $|u|$",fname="figur4_type"+str(typ))
+#figur5, hastighetsfelt
+quiverPlotter(ux,uy,points,fname="figur5_type"+str(typ),title= "Velocity-field")
+#figur6, trykk
+contourPlotter(p,tri2,title="Pressure, p",fname="figur6_type"+str(typ))
 
 plt.close('all')
