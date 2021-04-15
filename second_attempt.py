@@ -189,7 +189,7 @@ def typeTwoDom(points,N):
                 ti = i
     return elements, np.array(list(set(lin_vec)),dtype=int)
 
-#hjørnerør
+#hjørnerør 1 og 2
 def typeThreeBdry(points,N):
     non_homo_dir = [i*(3*(2**N)+1) for i in range(1,(2**N))]
     homo_dir1 = [i for i in range(3*(2**N)+1)]
@@ -234,6 +234,33 @@ def typeThreeDom(points,N):
             ti = i
     return elements, np.array(list(set(lin_vec)),dtype=int)
 
+#rør med bjelke i midten
+def typeFiveDom(points,N):
+    i = 0
+    r = 1
+    elements = []
+    lin = []
+    sq = []
+    lin_vec = []
+    while r != (2**N)+1:
+        s1 = points[i,0] < 0.549995 and points[i,0] > 0.450005 and points[i,1] < 0.149995 and points[i,1] > 0.050005
+        s2 = points[i+2,0] < 0.549995 and points[i+2,0] > 0.450005 and points[i+2,1] < 0.149995 and points[i+2,1] > 0.050005
+        s3 = points[i+(10*(2**N)+2),0] < 0.549995 and points[i+(10*(2**N)+2),0] > 0.450005 and points[i+(10*(2**N)+2),1] < 0.149995 and points[i+(10*(2**N)+2),1] > 0.050005
+        s4 = points[i+(10*(2**N)+4),0] < 0.549995 and points[i+(10*(2**N)+4),0] > 0.450005 and points[i+(10*(2**N)+4),1] < 0.149995 and points[i+(10*(2**N)+4),1] > 0.050005
+        if s1 or s2 or s3 or s4:
+            i += 2
+            continue
+        lin = np.asarray([i,i+2,i+(10*(2**N)+2),i+(10*(2**N)+4)])
+        sq = np.asarray([i,i+1,i+2,i+(5*(2**N)+1),i+(5*(2**N)+2),i+(5*(2**N)+3),i+(10*(2**N)+2),i+(10*(2**N)+3),i+(10*(2**N)+4)])
+        el = [lin,sq]
+        elements.append(el)
+        lin_vec = np.concatenate((lin_vec,lin))
+        i += 2
+        if i==(5*(2**N))*r + r -1:
+            i += 5*(2**N) +2
+            r += 2
+    
+    return elements, np.array(list(set(lin_vec)),dtype=int)
 
 #returnerer koeffisientene til de bikvadratiske basisfunksjonene
 def phiSq(points,el):
@@ -372,6 +399,11 @@ def createDomain(N,typ = 0):
         points = np.vstack((-points[:,1]+.6,points[:,0]-.4)).T
         elements,lin_set = typeThreeDom(points,N)
         neumann,homog_dir,non_homog_dir = typeThreeBdry(points,N)
+    elif typ == 5:
+        points = origpts[origpts[:,1] <.20005]
+        elements,lin_set = typeFiveDom(points,N)
+        non_homog_dir,homog_dir,neumann = typeZeroBdry(points,N)
+        homog_dir = np.concatenate((np.array(np.where(np.logical_and(np.logical_and(points[:,0]< 0.550005,points[:,0]> 0.449995),np.logical_and(points[:,1]< 0.150005,points[:,1]> 0.049995))))[0],homog_dir))
     #definerer indre noder
     inner = np.array([i for i in range(len(points))])
     inner = inner[~np.isin(inner, np.concatenate((non_homog_dir,homog_dir)))]
@@ -409,8 +441,8 @@ def contourPlotter(u,tri,title = "title",fname = "filename",newfig = True,save =
     if newfig:
         plt.figure()
         plt.title(title)
-    ax1 = plt.tricontourf(tri,u,levels = 20,cmap = 'rainbow')
-    ax2 = plt.tricontour(tri,u,levels = 20,colors = 'black',linewidths=0.25)
+    ax1 = plt.tricontourf(tri,u,levels = 50,cmap = 'rainbow')
+    #ax2 = plt.tricontour(tri,u,levels = 20,colors = 'black',linewidths=0.25)
     plt.axis('scaled')
     plt.colorbar(ax1)
     if save:
@@ -427,8 +459,8 @@ def quiverPlotter(ux,uy,points,title = "title",fname = "filename",newfig = True,
 
 
 #variabler, mu1 er amplitude på hastighetsprofil, mu2 er dynamsik viskositet
-mu1 = 1
-mu2 = 10 
+mu1 = 10
+mu2 = 100
 
 #definerer basisfunksjoner
 phi = lambda x,y,c,i: c[i][0] + c[i][1]*x + c[i][2]*y + c[i][3]*x*y + c[i][4]*(x**2) + c[i][5]*(y**2) + c[i][6]*(x**2)*y + c[i][7]*x*(y**2) +c[i][8]*(x**2)*(y**2)
@@ -444,8 +476,8 @@ b_bilin_x = lambda x,y,c1,c2,i,j: -phi_dx(x,y,c2,j)*zeta(x,y,c1,i)
 b_bilin_y = lambda x,y,c1,c2,i,j: -phi_dy(x,y,c2,j)*zeta(x,y,c1,i)
 
 #generer noder, elementer, kanter og indre noder
-N = 4
-#type domene
+N = 5
+#type domene: 0, 1, 2, 3, 4, 5
 typ = 4
 points,elements,lin_set,non_homog,homog,neu,inner = createDomain(N,typ)
 
