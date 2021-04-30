@@ -292,20 +292,21 @@ def phiLin(points,el):
     return basis_coeffs
 
 #numerisk integrasjonsfunksjon
-def gauss2D(integrand,p,el,i,j,c1 = 0,c2 = 0,multibasis = False,degree = 3):
+N1 = lambda zeta,eta: .25*(1-zeta)*(1-eta)
+N2 = lambda zeta,eta: .25*(1+zeta)*(1-eta)
+N3 = lambda zeta,eta: .25*(1+zeta)*(1+eta)
+N4 = lambda zeta,eta: .25*(1-zeta)*(1+eta)
+N0 = lambda zeta,eta: [N1(zeta,eta),N2(zeta,eta),N3(zeta,eta),N4(zeta,eta)]
+dx = lambda x: [x[1]-x[0],x[2]-x[3]]
+dy = lambda y: [y[3]-y[0],y[2]-y[1]]
+deta = lambda eta: [1-eta,1+eta]
+det = lambda zeta,eta,x,y: (1/16)*np.dot(dx(x),deta(eta))*np.dot(dy(y),deta(zeta))- (1/16)*np.dot(dx(y),deta(eta))*np.dot(dy(x),deta(zeta))
+ev = lambda zeta,eta,evi: np.dot(evi,N0(zeta,eta))
+
+def gauss2D(integrand,p,el,i,j,c1 = 0,c2 = 0,multibasis = False,degree = 4):
     p1,p2,p3,p4 = p[el[0]],p[el[1]],p[el[3]],p[el[2]]
     xi = [p1[0],p2[0],p3[0],p4[0]]
     yi = [p1[1],p2[1],p3[1],p4[1]]
-    N1 = lambda zeta,eta: .25*(1-zeta)*(1-eta)
-    N2 = lambda zeta,eta: .25*(1+zeta)*(1-eta)
-    N3 = lambda zeta,eta: .25*(1+zeta)*(1+eta)
-    N4 = lambda zeta,eta: .25*(1-zeta)*(1+eta)
-    N = lambda zeta,eta: [N1(zeta,eta),N2(zeta,eta),N3(zeta,eta),N4(zeta,eta)]
-    dx = lambda x: [x[1]-x[0],x[2]-x[3]]
-    dy = lambda y: [y[3]-y[0],y[2]-y[1]]
-    deta = lambda eta: [1-eta,1+eta]
-    det = lambda zeta,eta,x,y: (1/16)*np.dot(dx(x),deta(eta))*np.dot(dy(y),deta(zeta))- (1/16)*np.dot(dx(y),deta(eta))*np.dot(dy(x),deta(zeta))
-    ev = lambda zeta,eta,evi: np.dot(evi,N(zeta,eta))
 
     integral = 0
     if degree ==3:
@@ -424,11 +425,10 @@ def matrixShaver(Mat,rows,cols):
     return Out
 
 #hjelpefunksjon
-def solHelper(sol,lift,inner,points,p_init,non_homog):
+def solHelper(sol,lift,inner,points,non_homog):
     uxinner = sol[:len(inner)]
     uyinner = sol[len(inner):2*len(inner)]
     p = sol[2*len(inner):]
-    p = p - p.max() + p_init
     ux = np.zeros(len(points))
     uy = np.zeros(len(points))
     ux[inner] = uxinner
@@ -437,13 +437,10 @@ def solHelper(sol,lift,inner,points,p_init,non_homog):
     return ux,uy,p
 
 #hjelpefunksjon
-def plotHelp(points,lin_set,N,mu3,mu4):
-    tri1 = mtri.Triangulation(points[:,0],points[:,1])
-    apply_mask(tri1,points,alpha = ((1+max(mu3,mu4))*0.3)/(2**N))
-    lin_pts = points[lin_set]
-    tri2 = mtri.Triangulation(lin_pts[:,0],lin_pts[:,1])
-    apply_mask(tri2,lin_pts,alpha= ((1+max(mu3,mu4))*0.3)/(2**(N-1)))
-    return tri1,tri2
+def plotHelp(points,N,mu_max):
+    tri = mtri.Triangulation(points[:,0],points[:,1])
+    apply_mask(tri,points,alpha= ((1+mu_max)*0.3)/(2**(N)))
+    return tri
 
 #plottefunksjoner
 def contourPlotter(u,tri,title = "title",fname = "filename",newfig = True,save = True,cbar = True):
@@ -467,7 +464,7 @@ def quiverPlotter(ux,uy,points,title = "title",fname = "filename",newfig = True,
     if save:
         plt.savefig(fname, dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
 
-def initialize(inlet_velocity,N = 4,typ = 0,mu3=0,mu4=0,p_init = 1):
+def initialize(inlet_velocity,N = 4,typ = 0,mu3=0,mu4=0):
     #variabler, mu1 er amplitude på hastighetsprofil, mu2 er dynamsik viskositet
     mu1 = 150
 
@@ -522,7 +519,7 @@ def initialize(inlet_velocity,N = 4,typ = 0,mu3=0,mu4=0,p_init = 1):
     #bygger blokkmatrisa og løser
     Block = sp.bmat([[Ai,None,Dxi.T],[None,Ai,Dyi.T],[Dxi,Dyi,None]]).tocsr()
     u_bar = solver(Block,rhs)
-    ux,uy,p = solHelper(u_bar,rg,inner,points,p_init,non_homog)
+    ux,uy,p = solHelper(u_bar,rg,inner,points,non_homog)
 
     print("total out volumeflow")
     if typ == 2:
@@ -533,8 +530,7 @@ def initialize(inlet_velocity,N = 4,typ = 0,mu3=0,mu4=0,p_init = 1):
     print(sum(np.sqrt(ux[non_homog]**2 + uy[non_homog]**2))/len(non_homog)*(.2+.2*mu3))
 
     #generer triangulering og maskerer for enklere plotting 
-    tri1,tri2 = plotHelp(points,lin_set,N,mu3,mu4)
-    return ux,uy,p, tri1,tri2, points,elements,lin_set,neu
+    return ux,uy,p, points,elements,lin_set,neu
 
 def get_velocity_type(N,typ,mu3):
     points,elements,lin_set,non_homog,homog,neu,inner = createDomain(N,typ)
@@ -585,7 +581,6 @@ if __name__ == "__main__":
     #definerer lifting-funksjonen
     y_n = points[non_homog][:,1]
     rg = mu2*(y_n+mu3*.1)*((mu3*.2)+.2-(y_n+mu3*.1))
-    p_init = 1
 
     #fjerner nødvendige rader og kollonner
     Ai = matrixShaver(A,inner,inner)
@@ -603,7 +598,7 @@ if __name__ == "__main__":
     #bygger blokkmatrisa og løser
     Block = sp.bmat([[Ai,None,Dxi.T],[None,Ai,Dyi.T],[Dxi,Dyi,None]]).tocsr()
     u_bar = solver(Block,rhs)
-    ux,uy,p = solHelper(u_bar,rg,inner,points,p_init,non_homog)
+    ux,uy,p = solHelper(u_bar,rg,inner,points,non_homog)
 
 
     print("total out volumeflow")
@@ -615,7 +610,8 @@ if __name__ == "__main__":
     print(sum(np.sqrt(ux[non_homog]**2 + uy[non_homog]**2))/len(non_homog)*(.2+.2*mu3))
 
     #generer triangulering og maskerer for enklere plotting 
-    tri1,tri2 = plotHelp(points,lin_set,N,mu3,mu4)
+    tri1 = plotHelp(points,N,mu3)
+    tri2 = plotHelp(points[lin_set],N-1,mu3)
 
     #figur 0, domene
     plt.figure()
