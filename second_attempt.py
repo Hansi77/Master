@@ -328,15 +328,24 @@ def gauss2D(integrand,p,el,i,j,c1 = 0,c2 = 0,multibasis = False,degree = 4):
     return integral
 
 #maskeringsfunksjon for plotting
-def apply_mask(triang,p, alpha=0.1):
-    # Mask triangles with sidelength bigger some alpha
-    triangles = triang.triangles
-    # Mask off unwanted triangles.
-    xtri = p[triangles,0] - np.roll(p[triangles,0], 1, axis=1)
-    ytri = p[triangles,1] - np.roll(p[triangles,1], 1, axis=1)
-    maxi = np.max(np.sqrt(xtri**2 + ytri**2),axis=1)
-    # apply masking
-    triang.set_mask(maxi > alpha)
+def apply_mask(triang,p, alpha=0.1,coord_mask = False):
+    if coord_mask:
+        x = p[triang.triangles,0].mean(axis=1) 
+        y = p[triang.triangles,1].mean(axis=1)
+        cond1 = np.logical_and(x < .55, x > .45)
+        cond2 = np.logical_and(y < .15, y > .05)
+        mask = np.logical_and(cond1,cond2)
+        # apply masking
+        triang.set_mask(mask)
+    else:
+        # Mask triangles with sidelength bigger some alpha
+        triangles = triang.triangles
+        # Mask off unwanted triangles.
+        xtri = p[triangles,0] - np.roll(p[triangles,0], 1, axis=1)
+        ytri = p[triangles,1] - np.roll(p[triangles,1], 1, axis=1)
+        maxi = np.max(np.sqrt(xtri**2 + ytri**2),axis=1)
+        # apply masking
+        triang.set_mask(maxi > alpha)
 
 #hjelpefunksjon for generering av stivhets- og divergensmatriser
 def submat(points,el,int_func,multibasis = False):
@@ -439,7 +448,7 @@ def solHelper(sol,lift,inner,points,non_homog):
 #hjelpefunksjon
 def plotHelp(points,N,mu_max):
     tri = mtri.Triangulation(points[:,0],points[:,1])
-    apply_mask(tri,points,alpha= ((1+mu_max)*0.3)/(2**(N)))
+    apply_mask(tri,points,alpha= ((1+mu_max)*0.3)/(2**(N)),coord_mask=True)
     return tri
 
 #plottefunksjoner
@@ -536,12 +545,296 @@ def get_velocity_type(N,typ,mu3):
     points,elements,lin_set,non_homog,homog,neu,inner = createDomain(N,typ)
     return points[non_homog][:,1] + mu3*(points[non_homog][:,1]-.1)
 
+def omega(p):
+    x = p[0]
+    y = p[1]
+    if x < .45 and y < .05:
+        return 0
+    elif y < .05 and x > .45 and x < .55:
+        return 1
+    elif y < .05 and x > .55:
+        return 2
+    elif x < .45 and y > .05 and y < .15:
+        return 3
+    elif x > .55 and y > .05 and y < .15:
+        return 4
+    elif x < .45 and y > .15:
+        return 5
+    elif y > .15 and x > .45 and x < .55:
+        return 6
+    elif y > .15 and x > .55:
+        return 7
+    else:
+        return -1
+
+#genererer stivhetsmatrisa
+def createSubA(int_func,points,elements,domain):
+    A = sp.lil_matrix((len(points),len(points)))
+    for el in elements:
+        if omega(points[el[1][4]]) == domain:
+            a_el = submat(points,el,int_func)
+            for i,ai in enumerate(el[1]):
+                for j,aj in enumerate(el[1]):
+                    A[ai,aj] += a_el[i,j]
+        elif omega(points[el[1][4]]) == -1:
+            print("invalid point!")
+            return A
+    return A
+
+def createSubD(int_func,points,elements,domain):
+    B = sp.lil_matrix((len(points),len(points)))
+    for el in elements:
+        if omega(points[el[1][4]]) == domain:
+            a_el = submat(points,el,int_func,multibasis=True)
+            for i,ai in enumerate(el[0]):
+                for j,aj in enumerate(el[1]):
+                    B[ai,aj] += a_el[i,j]
+        elif omega(points[el[1][4]]) == -1:
+            print("invalid point!")
+            return B
+    return B
+
+def sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,q1,q2,q3,q4,mu,points,elements,lin_set,non_homog,homog,neu,inner):
+    A = sp.lil_matrix((len(points),len(points)))
+    for Ax,Ay,qx,qy in zip(Ax_set,Ay_set,q1,q2):
+        A += qx*Ax
+        A += qy*Ay
+
+    Dx = sp.lil_matrix((len(points),len(points)))
+    Dy = sp.lil_matrix((len(points),len(points)))
+    for D_x,D_y,qx,qy in zip(Dx_set,Dy_set,q3,q4):
+        Dx += qx*D_x
+        Dy += qy*D_y
+    
+    y_n = points[non_homog][:,1]
+
+    rg = mu2*((y_n+mu[2]*.1)*((mu[2]*.2)+.2-(y_n+mu[2]*.1)))/(0.2+0.2*mu[2])
+
+    #fjerner nødvendige rader og kollonner
+    Ai = matrixShaver(A,inner,inner)
+    Dxi = matrixShaver(Dx,lin_set,inner)
+    Dyi = matrixShaver(Dy,lin_set,inner)
+    Gx = matrixShaver(Dx,lin_set,non_homog)
+    G = matrixShaver(A,inner,non_homog)
+
+    #lager høyresiden
+    fx = -G@rg
+    fy = np.zeros_like(fx)
+    fp = -Gx@rg
+    rhs = np.concatenate((fx,fy,fp))
+
+    #bygger blokkmatrisa og løser
+    Block = sp.bmat([[Ai,None,Dxi.T],[None,Ai,Dyi.T],[Dxi,Dyi,None]]).tocsr()
+    u_bar = solver(Block,rhs)
+    ux,uy,p = solHelper(u_bar,rg,inner,points,non_homog)
+    return np.concatenate((ux,uy,p))
+
+def reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,RB_mat,q1,q2,q3,q4):
+    A = sp.lil_matrix((len(points),len(points)))
+    for Ax,Ay,qx,qy in zip(Ax_set,Ay_set,q1,q2):
+        A += qx*Ax
+        A += qy*Ay
+
+    Dx = sp.lil_matrix((len(points),len(points)))
+    Dy = sp.lil_matrix((len(points),len(points)))
+    for D_x,D_y,qx,qy in zip(Dx_set,Dy_set,q3,q4):
+        Dx += qx*D_x
+        Dy += qy*D_y
+    
+    y_n = points[non_homog][:,1]
+
+    rg = mu2*((y_n+mu[2]*.1)*((mu[2]*.2)+.2-(y_n+mu[2]*.1)))/(0.2+0.2*mu[2])
+
+    #fjerner nødvendige rader og kollonner
+    Ai = matrixShaver(A,inner,inner)
+    Dxi = matrixShaver(Dx,lin_set,inner)
+    Dyi = matrixShaver(Dy,lin_set,inner)
+    Gx = matrixShaver(Dx,lin_set,non_homog)
+    G = matrixShaver(A,inner,non_homog)
+
+    #lager høyresiden
+    fx = -G@rg
+    fy = np.zeros_like(fx)
+    fp = -Gx@rg
+    rhs = np.concatenate((fx,fy,fp))
+
+    #bygger blokkmatrisa og løser
+    Block = sp.bmat([[Ai,None,Dxi.T],[None,Ai,Dyi.T],[Dxi,Dyi,None]]).tocsr()
+    u_bar = solver(Block,rhs)
+    ux,uy,p = solHelper(u_bar,rg,inner,points,non_homog)
+    return np.concatenate((ux,uy,p))
+
+
+offline = False
+
+if offline: 
+    mu1 = 150
+    mu2 = 10
+    mu3 = [-0.5,1,2.5,4]
+    mu4 = [-0.5,1,2.5,4]
+    mu5 = [0,1,2,3,4,5]
+
+    #definerer basisfunksjoner
+    phi = lambda x,y,c,i: c[i][0] + c[i][1]*x + c[i][2]*y + c[i][3]*x*y + c[i][4]*(x**2) + c[i][5]*(y**2) + c[i][6]*(x**2)*y + c[i][7]*x*(y**2) +c[i][8]*(x**2)*(y**2)
+    phi_dx = lambda x,y,c,i: c[i][1] + c[i][3]*y + 2*c[i][4]*x + 2*c[i][6]*x*y + c[i][7]*(y**2) + 2*c[i][8]*x*(y**2)
+    phi_dy = lambda x,y,c,i: c[i][2] + c[i][3]*x + 2*c[i][5]*y + c[i][6]*(x**2) + 2*c[i][7]*x*y+ 2*c[i][8]*(x**2)*y
+
+    zeta = lambda x,y,c,i: c[i][0] + c[i][1]*x + c[i][2]*y +c[i][3]*x*y
+    zeta_dx = lambda x,y,c,i: c[i][1] + c[i][3]*y
+    zeta_dy = lambda x,y,c,i: c[i][2] + c[i][3]*x
+
+    a_bilin = lambda x,y,c,i,j: (1/mu1)*(phi_dx(x,y,c,j)*phi_dx(x,y,c,i) + phi_dy(x,y,c,j)*phi_dy(x,y,c,i))
+    a_bilin_x = lambda x,y,c,i,j: (1/mu1)*phi_dx(x,y,c,j)*phi_dx(x,y,c,i)
+    a_bilin_y = lambda x,y,c,i,j: (1/mu1)*phi_dy(x,y,c,j)*phi_dy(x,y,c,i)
+    b_bilin_x = lambda x,y,c1,c2,i,j: -phi_dx(x,y,c2,j)*zeta(x,y,c1,i)
+    b_bilin_y = lambda x,y,c1,c2,i,j: -phi_dy(x,y,c2,j)*zeta(x,y,c1,i)
+
+    #generer noder, elementer, kanter og indre noder
+    N = 3
+    #type domene: 0, 1, 2, 3, 4, 5
+    typ = 5
+    points,elements,lin_set,non_homog,homog,neu,inner = createDomain(N,typ)
+
+    manager = Manager()
+    S_mat = manager.list()
+
+    Ax_set = []
+    Ay_set = []
+    Dx_set = []
+    Dy_set = []
+    subdomains= 8
+
+    for i in range(subdomains):
+        Ax_set.append(createSubA(a_bilin_x,points,elements,domain = i))
+        Ay_set.append(createSubA(a_bilin_y,points,elements,domain = i))
+        Dx_set.append(createSubD(b_bilin_x,points,elements,domain = i))
+        Dy_set.append(createSubD(b_bilin_y,points,elements,domain = i))
+
+    def multiiterator(mu):
+        J1 = [mu[0]+1,2*mu[2] +1]
+        J2 = [1,2*mu[2] +1]
+        J3 = [mu[1]+1,2*mu[2] +1]
+        J4 = [mu[0]+1,1]
+        J5 = [mu[1]+1,1]
+        J6 = J1
+        J7 = J2
+        J8 = J3
+
+        Js = [J1,J2,J3,J4,J5,J6,J7,J8]
+        q1,q2,q3,q4 = [],[],[],[]
+
+        for J in Js:
+            q1.append(J[1]/J[0])
+            q2.append(J[0]/J[1])
+            q3.append(J[1])
+            q4.append(J[0])
+
+        #løser systemet
+        sol = sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,q1,q2,q3,q4,mu,points,elements,lin_set,non_homog,homog,neu,inner)
+        S_mat.append(sol)
+    
+    mu_list = []
+    for mu_1 in mu3:
+        for mu_2 in mu4:
+            for mu_3 in mu5:
+                mu_list.append([mu_1,mu_2,mu_3])
+    
+    r = process_map(multiiterator, mu_list, max_workers=32, chunksize=2)
+    S_mat = np.asmatrix(S_mat)
+    u, s, vt = np.linalg.svd(np.transpose(S_mat))
+    eigval_sum = sum(s**2)
+    decr_eigvals = s**2
+    TOL = 10E-8
+    index = 1
+    while sum(decr_eigvals[:index])/eigval_sum < 1 - TOL:
+        index += 1
+    usable_eigvals = decr_eigvals[:index]
+    
+    RB_mat = u[:,:index]
+    RB1 = RB_mat[:len(points)]
+    RB2 = RB_mat[len(points):2*len(points)]
+    RB3 = RB_mat[2*len(points):]
+
+    Ax_r1 = []
+    Ay_r1 = []
+    Ax_r2 = []
+    Ay_r2 = []
+    Dx_r = []
+    Dy_r = []
+    DxT_r = []
+    DyT_r = []
+    for Ax,Ay,Dx,Dy in zip(Ax_set,Ay_set,Dx_set,Dy_set):
+        Dx = Dx[lin_set]
+        Dy = Dy[lin_set]
+        Ax_r1.append(RB1.T@Ax@RB1)
+        Ax_r2.append(RB2.T@Ax@RB2)
+        Ay_r1.append(RB1.T@Ay@RB1)
+        Ay_r2.append(RB2.T@Ay@RB2)
+        Dx_r.append(RB3.T@Dx@RB1)
+        Dy_r.append(RB3.T@Dy@RB2)
+        DxT_r.append(RB1.T@Dx.T@RB3)
+        DyT_r.append(RB2.T@Dy.T@RB3)
+
+    #lagrer nødvendige matriser og vektorer
+    np.save('S_matrix',S_mat)
+    np.save('Axr1',Ax_r1)
+    np.save('Axr2',Ax_r2)
+    np.save('Ayr1',Ay_r1)
+    np.save('Ayr2',Ay_r2)
+    np.save('Dxr',Dx_r)
+    np.save('Dyr',Dy_r)
+    np.save('DxTr',DxT_r)
+    np.save('DyTr',DyT_r)
+    np.save('RB',RB_mat)
+    np.savetxt('eigvals.txt',s**2,delimiter=',')
+
+mu = [1,1,1]
+
+S_mat = np.load('S_matrix.npy',allow_pickle=True)
+Ax_r1 = np.load('Axr1.npy',allow_pickle=True)
+Ax_r2 = np.load('Axr2.npy',allow_pickle=True)
+Ay_r1 = np.load('Ayr1.npy',allow_pickle=True)
+Ay_r2 = np.load('Ayr2.npy',allow_pickle=True)
+Dx_r  = np.load('Dxr.npy',allow_pickle=True)
+Dy_r  = np.load('Dyr.npy',allow_pickle=True)
+DxT_r = np.load('DxTr.npy',allow_pickle=True)
+DyT_r = np.load('DyTr.npy',allow_pickle=True)
+RB_mat= np.load('RB.npy',allow_pickle=True)
+
+J1 = [mu[0]+1,2*mu[2] +1]
+J2 = [1,2*mu[2] +1]
+J3 = [mu[1]+1,2*mu[2] +1]
+J4 = [mu[0]+1,1]
+J5 = [mu[1]+1,1]
+J6 = J1
+J7 = J2
+J8 = J3
+
+Js = [J1,J2,J3,J4,J5,J6,J7,J8]
+q1,q2,q3,q4 = [],[],[],[]
+
+for J in Js:
+    q1.append(J[1]/J[0])
+    q2.append(J[0]/J[1])
+    q3.append(J[1])
+    q4.append(J[0])
+
+#cond1 = points[:,0] < .45
+#   cond2 = points[:,0] > .55
+#   cond3 = points[:,1] > .15
+#cond4 = points[:,1] < .05
+#points[cond1,0] = mu3*(points[cond1,0]-.45) + points[cond1,0]
+#points[cond2,0] = mu4*(points[cond2,0]-.55) + points[cond2,0]
+#points[cond3,1] = mu5*2*(points[cond3,1]-.15) + points[cond3,1]
+#points[cond4,1] = mu5*2*(points[cond4,1]-.05) + points[cond4,1]
+
 if __name__ == "__main__":
     #variabler, mu1 er amplitude på hastighetsprofil, mu2 er dynamsik viskositet
     mu1 = 150
     mu2 = 10
-    mu3 = 2
+    mu3 = 0
     mu4 = 0
+    mu5 = 2
 
     #definerer basisfunksjoner
     phi = lambda x,y,c,i: c[i][0] + c[i][1]*x + c[i][2]*y + c[i][3]*x*y + c[i][4]*(x**2) + c[i][5]*(y**2) + c[i][6]*(x**2)*y + c[i][7]*x*(y**2) +c[i][8]*(x**2)*(y**2)
@@ -559,19 +852,38 @@ if __name__ == "__main__":
     #generer noder, elementer, kanter og indre noder
     N = 4
     #type domene: 0, 1, 2, 3, 4, 5
-    typ = 0
+    typ = 5
     points,elements,lin_set,non_homog,homog,neu,inner = createDomain(N,typ)
-    o1 = [0,.4]
-    o2 = [.4,.6]
-    o3 = [.6,1]
 
-    cond1 = np.logical_and(points[:,0] >= o1[0],points[:,0] < o1[1])
-    cond2 = np.logical_and(points[:,0] >= o2[0],points[:,0] < o2[1])
-    cond3 = np.logical_and(points[:,0] >= o3[0],points[:,0] <= o3[1])
+    for el in elements:
+        print(points[el[1][4]])
 
-    points[cond1,1] = mu3*(points[cond1,1]-.1) + points[cond1,1]
-    points[cond2,1] = mu3*5*(o2[1]-points[cond2,0])*(points[cond2,1]-.1) + mu4*5*(points[cond2,0]-o2[0])*(points[cond2,1]-.1) + points[cond2,1]
-    points[cond3,1] = mu4*(points[cond3,1]-.1) + points[cond3,1]
+    o1 = [0,.45]
+    o2 = [.55,1]
+    o3 = [.45,.55,.05,.15]
+    #o1 = [0,.4]
+    #o2 = [.4,.6]
+    #o3 = [.6,1]
+
+    cond1 = points[:,0] < o1[1]
+    cond2 = points[:,0] > o2[0]
+    cond3 = points[:,1] > o3[3]
+    cond4 = points[:,1] < o3[2]
+
+    points[cond1,0] = mu3*(points[cond1,0]-.45) + points[cond1,0]
+    points[cond2,0] = mu4*(points[cond2,0]-.55) + points[cond2,0]
+    points[cond3,1] = mu5*2*(points[cond3,1]-.15) + points[cond3,1]
+    points[cond4,1] = mu5*2*(points[cond4,1]-.05) + points[cond4,1]
+
+    #domain 0
+    #cond1 = np.logical_and(points[:,0] >= o1[0],points[:,0] < o1[1])
+    #cond2 = np.logical_and(points[:,0] >= o2[0],points[:,0] < o2[1])
+    #cond3 = np.logical_and(points[:,0] >= o3[0],points[:,0] <= o3[1])
+
+    #domain 0
+    #points[cond1,1] = mu3*(points[cond1,1]-.1) + points[cond1,1]
+    #points[cond2,1] = mu3*5*(o2[1]-points[cond2,0])*(points[cond2,1]-.1) + mu4*5*(points[cond2,0]-o2[0])*(points[cond2,1]-.1) + points[cond2,1]
+    #points[cond3,1] = mu4*(points[cond3,1]-.1) + points[cond3,1]
 
     #bygger stivhets- og divergensmatrisene
     A = createA(a_bilin,points,elements)
@@ -580,7 +892,8 @@ if __name__ == "__main__":
 
     #definerer lifting-funksjonen
     y_n = points[non_homog][:,1]
-    rg = mu2*(y_n+mu3*.1)*((mu3*.2)+.2-(y_n+mu3*.1))
+
+    rg = mu2*((y_n+mu5*.1)*((mu5*.2)+.2-(y_n+mu5*.1)))/(0.2*mu5)
 
     #fjerner nødvendige rader og kollonner
     Ai = matrixShaver(A,inner,inner)
@@ -600,18 +913,18 @@ if __name__ == "__main__":
     u_bar = solver(Block,rhs)
     ux,uy,p = solHelper(u_bar,rg,inner,points,non_homog)
 
-
     print("total out volumeflow")
     if typ == 2:
-        print(sum(np.sqrt(ux[neu]**2 + uy[neu]**2))/len(neu)*.4)
+        print(sum(np.sqrt(ux[neu]**2 + uy[neu]**2))/len(neu)*(.2+.2*mu5))
     else:
-        print(sum(np.sqrt(ux[neu]**2+uy[neu]**2))/len(neu)*(.2+.2*mu4))
+        print(sum(np.sqrt(ux[neu]**2+uy[neu]**2))/len(neu)*(.2+.2*mu5))
     print("total in volumeflow")
-    print(sum(np.sqrt(ux[non_homog]**2 + uy[non_homog]**2))/len(non_homog)*(.2+.2*mu3))
+    print(sum(np.sqrt(ux[non_homog]**2 + uy[non_homog]**2))/len(non_homog)*(.2+.2*mu5))
 
     #generer triangulering og maskerer for enklere plotting 
-    tri1 = plotHelp(points,N,mu3)
-    tri2 = plotHelp(points[lin_set],N-1,mu3)
+    tri1 = plotHelp(points,N,mu4+mu5)
+    tri2 = plotHelp(points[lin_set],N-1,mu4+mu5)
+    
 
     #figur 0, domene
     plt.figure()
