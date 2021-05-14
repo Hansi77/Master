@@ -445,9 +445,7 @@ def solHelper(sol,lift,inner,points,non_homog):
     uy[inner] = uyinner
     return ux,uy,p
 
-def solHelper2(sol_r,RB_mat,points,non_homog,inner,mu):
-    print(sol_r.shape)
-    print(RB_mat.shape)
+def solHelper2(sol_r,RB_mat,points,non_homog,inner,lift):
     RB1 = RB_mat[:len(inner)]
     RB2 = RB_mat[len(inner):2*len(inner)]
     RB3 = RB_mat[2*len(inner):]
@@ -459,12 +457,7 @@ def solHelper2(sol_r,RB_mat,points,non_homog,inner,mu):
     uxinner = RB1@uxr
     uyinner = RB2@uyr
     p = RB3@pr
-    y_n = points[non_homog,1]
-    lift = mu[3]*10*y_n*(-10*y_n+2) #-(mu[3]/((1 + mu[2])**2))*(10*y_n+mu[2])*(10*y_n-2-mu[2])
 
-    #uxinner = sol[:len(inner)]
-    #uyinner = sol[len(inner):2*len(inner)]
-    #p = sol[2*len(inner):]
     ux = np.zeros(len(points))
     uy = np.zeros(len(points))
     ux[inner] = uxinner
@@ -575,21 +568,21 @@ def get_velocity_type(N,typ,mu3):
 def omega(p):
     x = p[0]
     y = p[1]
-    if x < .45 and y < .05:
+    if x <= .45 and y <= .05:
         return 0
     elif y < .05 and x > .45 and x < .55:
         return 1
-    elif y < .05 and x > .55:
+    elif y <= .05 and x >= .55:
         return 2
     elif x < .45 and y > .05 and y < .15:
         return 3
     elif x > .55 and y > .05 and y < .15:
         return 4
-    elif x < .45 and y > .15:
+    elif x <= .45 and y >= .15:
         return 5
     elif y > .15 and x > .45 and x < .55:
         return 6
-    elif y > .15 and x > .55:
+    elif y >= .15 and x >= .55:
         return 7
     else:
         return -1
@@ -640,7 +633,17 @@ def sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set,q1
     
     y_n = points[non_homog,1]
 
-    rg = mu[3]*10*y_n*(10*y_n-2)
+    c = -mu[3]/((1+mu[2])**2)
+    rg = y_n*0
+    for i,y in enumerate(y_n):
+        if omega([0,y]) == 0:
+            rg[i] = (20*mu[2]*y + 10*y)*(20*mu[2]*y + 10*y -2 -2*mu[2])
+        if omega([0,y]) == 3:
+            rg[i] = (10*y + mu[2])*(10*y -2 -mu[2])
+        if omega([0,y]) == 5:
+            rg[i] = (20*mu[2]*y + 10*y - 2*mu[2])*(20*mu[2]*y + 10*y -2 -4*mu[2])
+
+    rg = c*rg
 
     #lager høyresiden
     fx = -A_rhs@rg
@@ -653,7 +656,7 @@ def sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set,q1
     u_bar = solver(Block,rhs)
     return u_bar
 
-def reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_r,Dx_rhs_r,RB_mat,q1,q2,q3,q4,mu,points,non_homog,inner):
+def reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_r,Dx_rhs_r,q1,q2,q3,q4,mu,points,non_homog):
     A1 = sp.lil_matrix(Ax_r1[0].shape)
     A2 = sp.lil_matrix(Ax_r2[0].shape)
     A_rhs = sp.lil_matrix(Ax_rhs_r[0].shape)
@@ -679,7 +682,17 @@ def reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_
     
     y_n = points[non_homog,1]
 
-    rg = mu[3]*10*y_n*(-10*y_n+2) #(mu[3]/((1 + mu[2])**2))*(10*y_n+mu[2])*(10*y_n-2-mu[2])
+    c = -mu[3]/((1+mu[2])**2)
+    rg = y_n*0
+    for i,y in enumerate(y_n):
+        if omega([0,y]) == 0:
+            rg[i] = (20*mu[2]*y + 10*y)*(20*mu[2]*y + 10*y -2 -2*mu[2])
+        if omega([0,y]) == 3:
+            rg[i] = (10*y + mu[2])*(10*y -2 -mu[2])
+        if omega([0,y]) == 5:
+            rg[i] = (20*mu[2]*y + 10*y - 2*mu[2])*(20*mu[2]*y + 10*y -2 -4*mu[2])
+
+    rg = c*rg
 
     #lager høyresiden
     fx = -A_rhs@rg
@@ -689,13 +702,15 @@ def reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_
 
     #bygger blokkmatrisa og løser
     Block = sp.bmat([[A1,None,DxT],[None,A2,DyT],[Dx,Dy,None]]).tocsr()
-    print(Block.shape)
     u_bar = solver(Block,rhs)
-    print(u_bar.shape)
-    ux,uy,p = solHelper2(u_bar,RB_mat,points,non_homog,inner,mu)
-    return ux,uy,p
+    return u_bar
 
 offline = False
+mu = [0.13,-0.42,0.5,3.25]
+N = 5
+#type domene: 0, 1, 2, 3, 4, 5
+typ = 5
+points,elements,lin_set,non_homog,homog,neu,inner = createDomain(N,typ)
 
 if offline: 
     visc = 150
@@ -719,18 +734,10 @@ if offline:
     b_bilin_x = lambda x,y,c1,c2,i,j: -phi_dx(x,y,c2,j)*zeta(x,y,c1,i)
     b_bilin_y = lambda x,y,c1,c2,i,j: -phi_dy(x,y,c2,j)*zeta(x,y,c1,i)
 
-    #generer noder, elementer, kanter og indre noder
-    N = 3
-    #type domene: 0, 1, 2, 3, 4, 5
-    typ = 5
-    points,elements,lin_set,non_homog,homog,neu,inner = createDomain(N,typ)
-
     manager = Manager()
     S_mat = manager.list()
     manager2 = Manager()
-    points_list = manager2.list()
-    manager3 = Manager()
-    new_mu_list = manager3.list()
+    new_mu_list = manager2.list()
 
     Ax_set = []
     Ay_set = []
@@ -765,17 +772,6 @@ if offline:
         Dx_rhs_set.append(Dx_rhs)
 
     def multiiterator(mu):
-        new_points = points
-
-        cond1 = points[:,0] < .45
-        cond2 = points[:,0] > .55
-        cond3 = points[:,1] > .15
-        cond4 = points[:,1] < .05
-        new_points[cond1,0] = mu[0]*(new_points[cond1,0]-.45) + new_points[cond1,0]
-        new_points[cond2,0] = mu[1]*(new_points[cond2,0]-.55) + new_points[cond2,0]
-        new_points[cond3,1] = mu[2]*2*(new_points[cond3,1]-.15) + new_points[cond3,1]
-        new_points[cond4,1] = mu[2]*2*(new_points[cond4,1]-.05) + new_points[cond4,1]
-
         J1 = [mu[0]+1,2*mu[2] +1]
         J2 = [1,2*mu[2] +1]
         J3 = [mu[1]+1,2*mu[2] +1]
@@ -797,7 +793,6 @@ if offline:
         #løser systemet
         sol = sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set,q1,q2,q3,q4,mu,points,lin_set,non_homog,inner)
         S_mat.append(sol)
-        points_list.append(new_points)
         new_mu_list.append(mu)
     
     mu_list = []
@@ -807,17 +802,16 @@ if offline:
                 for mu_4 in mu2:
                     mu_list.append([mu_1,mu_2,mu_3,mu_4])
     
-    r = process_map(multiiterator, mu_list, max_workers=32, chunksize=1)
+    r = process_map(multiiterator, mu_list, max_workers=32, chunksize=2)
     S_mat = np.asarray(S_mat)
-    points_list = np.asarray(points_list)
     new_mu_list = np.asarray(new_mu_list)
     u, s, vt = np.linalg.svd(np.transpose(S_mat))
     eigval_sum = sum(s**2)
     decr_eigvals = s**2
     ##### TOLERANSEN FOR FEILEN MELLOM FOM OG ROM #####
-    TOL = 10E-6
+    TOL = 10E-4
     index = 1
-    while sum(decr_eigvals[:index])/eigval_sum < 1 - TOL:
+    while sum(decr_eigvals[:index])/eigval_sum < 1 - TOL**2:
         index += 1
     usable_eigvals = decr_eigvals[:index]
     
@@ -825,11 +819,6 @@ if offline:
     RB1 = RB_mat[:len(inner)]
     RB2 = RB_mat[len(inner):2*len(inner)]
     RB3 = RB_mat[2*len(inner):]
-
-    print(RB_mat.shape)
-    print(RB1.shape)
-    print(RB2.shape)
-    print(RB3.shape)
 
     Ax_r1 = []
     Ay_r1 = []
@@ -856,10 +845,16 @@ if offline:
         Dx_rhs_r.append(RB3.T@Dx_rhs)
 
     #lagrer nødvendige matriser og vektorer
-    
     np.save('S_matrix',S_mat)
-    np.save('points_list',points_list)
     np.save('mu_list',new_mu_list)
+    np.save('Ax',Ax_set)
+    np.save('Ay',Ay_set)
+    np.save('Dx',Dx_set)
+    np.save('Dy',Dy_set)
+    np.save('Axrhs',Ax_rhs_set)
+    np.save('Ayrhs',Ay_rhs_set)
+    np.save('Dxrhs',Dx_rhs_set)
+    #reduserte matriser
     np.save('Axr1',Ax_r1)
     np.save('Axr2',Ax_r2)
     np.save('Ayr1',Ay_r1)
@@ -875,16 +870,17 @@ if offline:
     np.savetxt('eigvals.txt',s**2,delimiter=',')
     
 else:
-    mu = [0,0,1,1]
-
-    N = 3
-    #type domene: 0, 1, 2, 3, 4, 5
-    typ = 5
-    points,elements,lin_set,non_homog,homog,neu,inner = createDomain(N,typ)
-
+    #laster inn lagrede matriser
     S_mat = np.load('S_matrix.npy',allow_pickle=True)
-    points_list = np.load('points_list.npy',allow_pickle=True)
     mu_list = np.load('mu_list.npy',allow_pickle=True)
+    Ax_set = np.load('Ax.npy',allow_pickle=True)
+    Ay_set = np.load('Ay.npy',allow_pickle=True)
+    Dx_set = np.load('Dx.npy',allow_pickle=True)
+    Dy_set = np.load('Dy.npy',allow_pickle=True)
+    Ax_rhs_set = np.load('Axrhs.npy',allow_pickle=True)
+    Ay_rhs_set = np.load('Ayrhs.npy',allow_pickle=True)
+    Dx_rhs_set = np.load('Dxrhs.npy',allow_pickle=True)
+    #reduserte matriser
     Ax_r1 = np.load('Axr1.npy',allow_pickle=True)
     Ax_r2 = np.load('Axr2.npy',allow_pickle=True)
     Ay_r1 = np.load('Ayr1.npy',allow_pickle=True)
@@ -926,15 +922,19 @@ else:
         q3.append(J[1])
         q4.append(J[0])
 
-    ux,uy,p = reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_r,Dx_rhs_r,RB_mat,q1,q2,q3,q4,mu,points,non_homog,inner)
+    #k = 0
+    #for i,mui in enumerate(mu_list):
+    #    if all(mui == mu):
+    #        k = i
+    #orig_sol = S_mat[k]
 
-    k = 0
-    for i,mui in enumerate(mu_list):
-        if all(mui == mu):
-            print(i)
-            k = i
+    start_time = time.time()
+    orig_sol = sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set,q1,q2,q3,q4,mu,points,lin_set,non_homog,inner)
+    print("FOM solver time:", time.time()- start_time)
 
-    orig_sol = S_mat[k]
+    start_time = time.time()
+    red_sol = reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_r,Dx_rhs_r,q1,q2,q3,q4,mu,points,non_homog)
+    print("ROM solver time:", time.time()- start_time)
 
     cond1 = points[:,0] < .45
     cond2 = points[:,0] > .55
@@ -946,20 +946,19 @@ else:
     points[cond4,1] = mu[2]*2*(points[cond4,1]-.05) + points[cond4,1]
 
     y_n = points[non_homog,1]
-
-    print(y_n)
     lift = -(mu[3]/((1 + mu[2])**2))*(10*y_n+mu[2])*(10*y_n-(2+mu[2]))
-    print(lift)
+
     ux_o,uy_o,p_o = solHelper(orig_sol,lift,inner,points,non_homog)
+    ux,uy,p = solHelper2(red_sol,RB_mat,points,non_homog,inner,lift)
 
     print(np.linalg.norm(ux-ux_o))
     print(np.linalg.norm(uy-uy_o))
     print(np.linalg.norm(p-p_o))
 
     tri1 = plotHelp(points,N,1)
-    vel_mag_orig = ux_o#vel_mag_orig = np.sqrt(ux_o**2 + uy_o**2)
+    vel_mag_orig = vel_mag_orig = np.sqrt(ux_o**2 + uy_o**2)
     press_orig = p_o
-    vel_mag_red = ux#vel_mag_red = np.sqrt(ux**2 + uy**2)
+    vel_mag_red = vel_mag_red = np.sqrt(ux**2 + uy**2)
     press_red = p
     tri2 = plotHelp(points[lin_set],N,1)
 
@@ -968,10 +967,7 @@ else:
     contourPlotter(vel_mag_red,tri1,title = "Velocity magnitude reduced",fname = "aa_reduced_velocity")
     contourPlotter(press_red,tri2,title = "Pressure reduced",fname = "aa_reduced_pressure")
     plt.close('all')
-
-    
-    
-
+   
 '''
 if something:
     points_list = np.asarray(points_list)
