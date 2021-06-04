@@ -262,6 +262,64 @@ def typeFiveDom(points,N):
     
     return elements, np.array(list(set(lin_vec)),dtype=int)
 
+#skjøterør
+def typeSixBdry(points,N):
+    non_homo_dir1 = [i*(5*(2**N)+1) for i in range(1,(2**N)+1)]    
+    non_homo_dir2 = [i*(3*(2**N)+1)+((2**N)+1)*(5*(2**N)+1) for i in range((2**N)-1)]
+    non_homo_dir = np.concatenate((non_homo_dir1,non_homo_dir2)) 
+    homo_dir1 = [i for i in range(5*(2**N)+1)]
+    homo_dir2 = [i for i in range(((2**N)-1)*(3*(2**N)+1)+((2**N)+1)*(5*(2**N)+1),len(points))]
+    homo_dir3 = [i for i in range((2**N)*(5*(2**N)+1)+3*(2**N),(2**N)*(5*(2**N)+1)+5*(2**N)+1)]
+    homo_dir4 = [i*(3*(2**N)+1)+((2**N)+1)*(5*(2**N)+1)-1 for i in range(1,(2**N))]
+    homo_dir = np.concatenate((homo_dir1,homo_dir2,homo_dir3,homo_dir4))
+    homo_neu = [i*(5*(2**N)+1)-1 for i in range(2,2**N+1)]
+    return np.asarray(non_homo_dir), np.asarray(np.sort(homo_dir)), np.asarray(homo_neu)
+
+def typeSixDom(points,N):
+    i = 0
+    r = 1
+    elements = []
+    lin = []
+    sq = []
+    lin_vec = []
+    while r != (2**N)+1:
+        lin = np.asarray([i,i+2,i+(10*(2**N)+2),i+(10*(2**N)+4)])
+        sq = np.asarray([i,i+1,i+2,i+(5*(2**N)+1),i+(5*(2**N)+2),i+(5*(2**N)+3),i+(10*(2**N)+2),i+(10*(2**N)+3),i+(10*(2**N)+4)])
+        el = [lin,sq]
+        elements.append(el)
+        lin_vec = np.concatenate((lin_vec,lin))
+        i += 2
+        if i==(5*(2**N))*r + r -1:
+            i += 5*(2**N) +2
+            r += 2
+    
+    r = 1
+    ti = i
+    while r != (2**N) +1:
+        if r == 1:
+            lin = np.asarray([i,i+2,i+4*2*(2**N)+2,i+4*2*(2**N)+4])
+            sq = np.asarray([i, i+1,i+2,i+5*(2**N)+1,i+5*(2**N)+2,i+5*(2**N)+3,i+4*2*(2**N)+2,i+4*2*(2**N)+3,i+4*2*(2**N)+4])
+            el = [lin,sq]
+            elements.append(el)
+            lin_vec = np.concatenate((lin_vec,lin))
+        else:
+            lin = np.asarray([i,i+2,i+2*3*(2**N)+2,i+2*3*(2**N)+4])
+            sq = np.asarray([i,i+1,i+2,i+3*(2**N)+1,i+3*(2**N)+2,i+3*(2**N)+3,i+2*3*(2**N)+2,i+2*3*(2**N)+3,i+2*3*(2**N)+4])
+            el = [lin,sq]
+            elements.append(el)
+            lin_vec = np.concatenate((lin_vec,lin))
+        i += 2
+        if i == ti + 3*(2**N):
+            if r == 1:
+                i += 5*(2**N)+2
+                r += 2
+                ti = i
+            else:
+                i += 3*(2**N)+2
+                r += 2
+                ti = i
+    return elements, np.array(list(set(lin_vec)),dtype=int)
+
 #returnerer koeffisientene til de bikvadratiske basisfunksjonene
 def phiSq(points,el):
     phi_el = np.ones((9,9))
@@ -422,6 +480,16 @@ def createDomain(N,typ = 0):
         elements,lin_set = typeFiveDom(points,N)
         non_homog_dir,homog_dir,neumann = typeZeroBdry(points,N)
         homog_dir = np.concatenate((np.array(np.where(np.logical_and(np.logical_and(points[:,0]< 0.550005,points[:,0]> 0.449995),np.logical_and(points[:,1]< 0.150005,points[:,1]> 0.049995))))[0],homog_dir))
+    elif typ == 6:
+        points = origpts[np.logical_or(origpts[:,1] <.20005,np.logical_and(origpts[:,1] <.40005,origpts[:,0] <.60005))]
+        elements,lin_set = typeSixDom(points,N)
+        non_homog_dir,homog_dir,neumann = typeSixBdry(points,N)
+    elif typ == 7:
+        points = origpts[np.logical_or(origpts[:,1] <.20005,np.logical_and(origpts[:,1] <.40005,origpts[:,0] <.60005))]
+        points[:,0] = 1 - points[:,0]
+        elements,lin_set = typeSixDom(points,N)
+        neumann,homog_dir,non_homog_dir = typeSixBdry(points,N)
+
     #definerer indre noder
     inner = np.array([i for i in range(len(points))])
     inner = inner[~np.isin(inner, np.concatenate((non_homog_dir,homog_dir)))]
@@ -706,9 +774,9 @@ def reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_
     return u_bar
 
 offline = False
-mu = [0.13,-0.42,0.5,3.25]
+mu = [-.5,-.5,1,4] #length pre-hole, length post_hole, width, amplitude
 N = 5
-#type domene: 0, 1, 2, 3, 4, 5
+#type domene: 0, 1, 2, 3, 4, 5, 6, 7
 typ = 5
 points,elements,lin_set,non_homog,homog,neu,inner = createDomain(N,typ)
 
@@ -934,6 +1002,7 @@ else:
 
     start_time = time.time()
     red_sol = reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_r,Dx_rhs_r,q1,q2,q3,q4,mu,points,non_homog)
+    print(red_sol.shape)
     print("ROM solver time:", time.time()- start_time)
 
     cond1 = points[:,0] < .45
@@ -951,9 +1020,12 @@ else:
     ux_o,uy_o,p_o = solHelper(orig_sol,lift,inner,points,non_homog)
     ux,uy,p = solHelper2(red_sol,RB_mat,points,non_homog,inner,lift)
 
-    print(np.linalg.norm(ux-ux_o))
-    print(np.linalg.norm(uy-uy_o))
-    print(np.linalg.norm(p-p_o))
+    print(ux_o.shape, p_o.shape)
+    print(ux.shape, p.shape)
+
+    print(np.linalg.norm(ux-ux_o)/np.linalg.norm(ux_o))
+    print(np.linalg.norm(uy-uy_o)/np.linalg.norm(ux_o))
+    print(np.linalg.norm(p-p_o)/np.linalg.norm(ux_o))
 
     tri1 = plotHelp(points,N,1)
     vel_mag_orig = vel_mag_orig = np.sqrt(ux_o**2 + uy_o**2)
@@ -962,10 +1034,10 @@ else:
     press_red = p
     tri2 = plotHelp(points[lin_set],N,1)
 
-    contourPlotter(vel_mag_orig,tri1,title = "Velocity magnitude original",fname = "aa_original_velocity")
-    contourPlotter(press_orig,tri2,title = "Pressure original",fname = "aa_original_pressure")
-    contourPlotter(vel_mag_red,tri1,title = "Velocity magnitude reduced",fname = "aa_reduced_velocity")
-    contourPlotter(press_red,tri2,title = "Pressure reduced",fname = "aa_reduced_pressure")
+    contourPlotter(vel_mag_orig,tri1,title = "Velocity magnitude original, $\mu$ = "+str(mu),fname = "aa_original_velocity_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
+    contourPlotter(press_orig,tri2,title = "Pressure original, $\mu$ = "+str(mu),fname = "aa_original_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
+    contourPlotter(vel_mag_red,tri1,title = "Velocity magnitude reduced, $\mu$ = "+str(mu),fname = "aa_reduced_velocity"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
+    contourPlotter(press_red,tri2,title = "Pressure reduced, $\mu$ = "+str(mu),fname = "aa_reduced_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
     plt.close('all')
    
 '''
