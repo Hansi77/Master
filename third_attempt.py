@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 import time
 from itertools import chain
+import os
+from itertools import product
 
 import scipy.spatial as spsa
 import scipy.sparse as sp
@@ -390,9 +392,13 @@ def apply_mask(triang,p, alpha=0.1,coord_mask = False):
     if coord_mask:
         x = p[triang.triangles,0].mean(axis=1) 
         y = p[triang.triangles,1].mean(axis=1)
-        cond1 = np.logical_and(x < .55, x > .45)
-        cond2 = np.logical_and(y < .15, y > .05)
-        mask = np.logical_and(cond1,cond2)
+        if typ == 5:
+            cond1 = np.logical_and(x < .55, x > .45)
+            cond2 = np.logical_and(y < .15, y > .05)
+            mask = np.logical_and(cond1,cond2)
+        elif typ == 6:
+            cond1 = np.logical_and(x > .6, y > (1+mu[0])*.2)
+            mask = cond1
         # apply masking
         triang.set_mask(mask)
     else:
@@ -633,28 +639,37 @@ def get_velocity_type(N,typ,mu3):
     points,elements,lin_set,non_homog,homog,neu,inner = createDomain(N,typ)
     return points[non_homog][:,1] + mu3*(points[non_homog][:,1]-.1)
 
+#her defineres subdomenene for hver archetype
 def omega(p):
     x = p[0]
     y = p[1]
-    if x <= .45 and y <= .05:
-        return 0
-    elif y < .05 and x > .45 and x < .55:
-        return 1
-    elif y <= .05 and x >= .55:
-        return 2
-    elif x < .45 and y > .05 and y < .15:
-        return 3
-    elif x > .55 and y > .05 and y < .15:
-        return 4
-    elif x <= .45 and y >= .15:
-        return 5
-    elif y > .15 and x > .45 and x < .55:
-        return 6
-    elif y >= .15 and x >= .55:
-        return 7
-    else:
-        return -1
-
+    if typ == 5:
+        if x <= .45 and y <= .05:
+            return 0
+        elif y < .05 and x > .45 and x < .55:
+            return 1
+        elif y <= .05 and x >= .55:
+            return 2
+        elif x < .45 and y > .05 and y < .15:
+            return 3
+        elif x > .55 and y > .05 and y < .15:
+            return 4
+        elif x <= .45 and y >= .15:
+            return 5
+        elif y > .15 and x > .45 and x < .55:
+            return 6
+        elif y >= .15 and x >= .55:
+            return 7
+        else:
+            return -1
+    elif typ == 6 or typ == 7:
+        if y <= 0.2:
+            return 0
+        elif y > 0.2:
+            return 1
+        else: 
+            return -1
+    
 #genererer stivhetsmatrisa
 def createSubA(int_func,points,elements,domain):
     A = sp.lil_matrix((len(points),len(points)))
@@ -682,10 +697,10 @@ def createSubD(int_func,points,elements,domain):
             return B
     return B
 
-def sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set,q1,q2,q3,q4,mu,points,lin_set,non_homog,inner):
+def sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set,q_list,mu,points,lin_set,non_homog,inner):
     A = sp.lil_matrix((len(inner),len(inner)))
     A_rhs = sp.lil_matrix((len(inner),len(non_homog)))
-    for Ax,Ay,Ax_rhs,Ay_rhs,qx,qy in zip(Ax_set,Ay_set,Ax_rhs_set,Ay_rhs_set,q1,q2):
+    for Ax,Ay,Ax_rhs,Ay_rhs,qx,qy in zip(Ax_set,Ay_set,Ax_rhs_set,Ay_rhs_set,q_list[0],q_list[1]):
         A += qx*Ax
         A += qy*Ay
         A_rhs += qx*Ax_rhs
@@ -694,25 +709,34 @@ def sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set,q1
     Dx = sp.lil_matrix((len(lin_set),len(inner)))
     Dy = sp.lil_matrix((len(lin_set),len(inner)))
     D_rhs = sp.lil_matrix((len(lin_set),len(non_homog)))
-    for D_x,D_y,Dx_rhs,qx,qy in zip(Dx_set,Dy_set,Dx_rhs_set,q3,q4):
+    for D_x,D_y,Dx_rhs,qx,qy in zip(Dx_set,Dy_set,Dx_rhs_set,q_list[2],q_list[3]):
         Dx += qx*D_x
         Dy += qy*D_y
         D_rhs += qx*Dx_rhs
     
     y_n = points[non_homog,1]
 
-    c = -mu[3]/((1+mu[2])**2)
-    rg = y_n*0
-    for i,y in enumerate(y_n):
-        if omega([0,y]) == 0:
-            rg[i] = (20*mu[2]*y + 10*y)*(20*mu[2]*y + 10*y -2 -2*mu[2])
-        if omega([0,y]) == 3:
-            rg[i] = (10*y + mu[2])*(10*y -2 -mu[2])
-        if omega([0,y]) == 5:
-            rg[i] = (20*mu[2]*y + 10*y - 2*mu[2])*(20*mu[2]*y + 10*y -2 -4*mu[2])
+    if typ == 5:
+        c = -mu[3]/((1+mu[2])**2)
+        rg = y_n*0
+        for i,y in enumerate(y_n):
+            if omega([0,y]) == 0:
+                rg[i] = (20*mu[2]*y + 10*y)*(20*mu[2]*y + 10*y -2 -2*mu[2])
+            if omega([0,y]) == 3:
+                rg[i] = (10*y + mu[2])*(10*y -2 -mu[2])
+            if omega([0,y]) == 5:
+                rg[i] = (20*mu[2]*y + 10*y - 2*mu[2])*(20*mu[2]*y + 10*y -2 -4*mu[2])
+
+    if typ == 6:
+        c = -mu[2]/((1+mu[1])**2)
+        rg = y_n*0
+        for i,y in enumerate(y_n):
+            if omega([0,y]) == 0:
+                rg[i] = (20*mu[1]*y + 10*y)*(20*mu[1]*y + 10*y -2 -2*mu[1])
+            if omega([0,y]) == 1:
+                rg[i] = (10*y + mu[1])*(10*y -2 -mu[1])
 
     rg = c*rg
-
     #lager høyresiden
     fx = -A_rhs@rg
     fy = np.zeros_like(fx)
@@ -724,11 +748,11 @@ def sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set,q1
     u_bar = solver(Block,rhs)
     return u_bar
 
-def reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_r,Dx_rhs_r,q1,q2,q3,q4,mu,points,non_homog):
+def reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_r,Dx_rhs_r,q_list,mu,points,non_homog):
     A1 = sp.lil_matrix(Ax_r1[0].shape)
     A2 = sp.lil_matrix(Ax_r2[0].shape)
     A_rhs = sp.lil_matrix(Ax_rhs_r[0].shape)
-    for Ax1,Ax2,Ay1,Ay2,Ax_rhs,Ay_rhs,qx,qy in zip(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Ax_rhs_r,Ay_rhs_r,q1,q2):
+    for Ax1,Ax2,Ay1,Ay2,Ax_rhs,Ay_rhs,qx,qy in zip(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Ax_rhs_r,Ay_rhs_r,q_list[0],q_list[1]):
         A1 += qx*Ax1
         A1 += qy*Ay1
         A2 += qx*Ax2
@@ -741,7 +765,7 @@ def reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_
     DxT = sp.lil_matrix(DxT_r[0].shape)
     DyT = sp.lil_matrix(DyT_r[0].shape)
     D_rhs = sp.lil_matrix(Dx_rhs_r[0].shape)
-    for D_x,D_y,D_xT,D_yT,Dx_rhs,qx,qy in zip(Dx_r,Dy_r,DxT_r,DyT_r,Dx_rhs_r,q3,q4):
+    for D_x,D_y,D_xT,D_yT,Dx_rhs,qx,qy in zip(Dx_r,Dy_r,DxT_r,DyT_r,Dx_rhs_r,q_list[2],q_list[3]):
         Dx += qx*D_x
         Dy += qy*D_y
         DxT += qx*D_xT
@@ -750,18 +774,26 @@ def reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_
     
     y_n = points[non_homog,1]
 
-    c = -mu[3]/((1+mu[2])**2)
-    rg = y_n*0
-    for i,y in enumerate(y_n):
-        if omega([0,y]) == 0:
-            rg[i] = (20*mu[2]*y + 10*y)*(20*mu[2]*y + 10*y -2 -2*mu[2])
-        if omega([0,y]) == 3:
-            rg[i] = (10*y + mu[2])*(10*y -2 -mu[2])
-        if omega([0,y]) == 5:
-            rg[i] = (20*mu[2]*y + 10*y - 2*mu[2])*(20*mu[2]*y + 10*y -2 -4*mu[2])
+    if typ == 5:
+        c = -mu[3]/((1+mu[2])**2)
+        rg = y_n*0
+        for i,y in enumerate(y_n):
+            if omega([0,y]) == 0:
+                rg[i] = (20*mu[2]*y + 10*y)*(20*mu[2]*y + 10*y -2 -2*mu[2])
+            if omega([0,y]) == 3:
+                rg[i] = (10*y + mu[2])*(10*y -2 -mu[2])
+            if omega([0,y]) == 5:
+                rg[i] = (20*mu[2]*y + 10*y - 2*mu[2])*(20*mu[2]*y + 10*y -2 -4*mu[2])
+    if typ == 6:
+        c = -mu[2]/((1+mu[1])**2)
+        rg = y_n*0
+        for i,y in enumerate(y_n):
+            if omega([0,y]) == 0:
+                rg[i] = (20*mu[1]*y + 10*y)*(20*mu[1]*y + 10*y -2 -2*mu[1])
+            if omega([0,y]) == 1:
+                rg[i] = (10*y + mu[1])*(10*y -2 -mu[1])
 
     rg = c*rg
-
     #lager høyresiden
     fx = -A_rhs@rg
     fy = np.zeros_like(fx)
@@ -774,18 +806,70 @@ def reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_
     return u_bar
 
 offline = False
-mu = [-.5,-.5,1,4] #length pre-hole, length post_hole, width, amplitude
-N = 5
+plot_eigenvalues = False
+#mu = [-.5,-.5,1,4] #length pre-hole, length post_hole, width, amplitude
+mu = [0,-.25,3]
+N = 3
 #type domene: 0, 1, 2, 3, 4, 5, 6, 7
-typ = 5
+typ = 6
+#antall subdomener for archetypen
+subdomains= 2
 points,elements,lin_set,non_homog,homog,neu,inner = createDomain(N,typ)
 
+#iteratorfunksjon for multiprocessing, for hvert archetype må endringer gjøres
+def multiiterator(mu):
+    #Jakobianter og affine-funksjoner, må endres før en offline-fase skal gjennomføres
+    if typ == 5:
+        J1 = [mu[0]+1,2*mu[2] +1]
+        J2 = [1,2*mu[2] +1]
+        J3 = [mu[1]+1,2*mu[2] +1]
+        J4 = [mu[0]+1,1]
+        J5 = [mu[1]+1,1]
+        J6 = J1
+        J7 = J2
+        J8 = J3
+
+        Js = [J1,J2,J3,J4,J5,J6,J7,J8]
+    elif typ == 6:
+        J1 = [1,mu[0] +1]
+        J2 = [1,1-mu[0] + (2*mu[1])/(1-mu[0]) - (2*mu[1]*mu[0])/(1-mu[0])]
+
+        Js = [J1,J2]
+
+    q1,q2,q3,q4 = [],[],[],[]
+    for J in Js:
+        q1.append(J[1]/J[0])
+        q2.append(J[0]/J[1])
+        q3.append(J[1])
+        q4.append(J[0])
+        
+        q_list = [q1,q2,q3,q4]
+
+    #løser systemet
+    sol = sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set,q_list,mu,points,lin_set,non_homog,inner)
+    S_mat.append(sol)
+    new_mu_list.append(mu)
+
+#my-verdier må endres for hver archetype
 if offline: 
     visc = 150
-    mu2 = [1,2,3,4] #amplitude of inlet velocity profile
-    mu3 = [-0.5,0,1] #length scale of pre-hole pipe
-    mu4 = [-0.5,0,1] #length scape of post-hole pipe
-    mu5 = [0,0.5,1] #width of pipe
+    if typ == 5:
+        mu1 = [0,0.5,1] #length scale of pre-hole pipe
+        mu2 = [0,0.5,1] #length scape of post-hole pipe
+        mu3 = [0,0.5,1] #width of pipe
+        mu4 = [1,2,3,4] #amplitude of inlet velocity profile
+        mu_list = []
+        for my in product(mu1,mu2,mu3,mu4):
+            mu_list.append(my)
+    elif typ == 6:
+        mu1 = [0,0.25,0.5,0.75] #length scale of pre-hole pipe
+        mu2 = [0,0.25,0.5,0.75] #length scape of post-hole pipe
+        mu3 = [1,2,3,4] #amplitude of inlet velocity profile
+        mu_list = []
+        for my in product(mu1,mu2,mu3):
+            mu_list.append(my)
+
+
 
     #definerer basisfunksjoner
     phi = lambda x,y,c,i: c[i][0] + c[i][1]*x + c[i][2]*y + c[i][3]*x*y + c[i][4]*(x**2) + c[i][5]*(y**2) + c[i][6]*(x**2)*y + c[i][7]*x*(y**2) +c[i][8]*(x**2)*(y**2)
@@ -814,8 +898,6 @@ if offline:
     Ax_rhs_set = []
     Ay_rhs_set = []
     Dx_rhs_set = []
-    
-    subdomains= 8
 
     for i in range(subdomains):
         Ax = createSubA(a_bilin_x,points,elements,domain = i)
@@ -838,37 +920,6 @@ if offline:
         Ax_rhs_set.append(Ax_rhs)
         Ay_rhs_set.append(Ay_rhs)
         Dx_rhs_set.append(Dx_rhs)
-
-    def multiiterator(mu):
-        J1 = [mu[0]+1,2*mu[2] +1]
-        J2 = [1,2*mu[2] +1]
-        J3 = [mu[1]+1,2*mu[2] +1]
-        J4 = [mu[0]+1,1]
-        J5 = [mu[1]+1,1]
-        J6 = J1
-        J7 = J2
-        J8 = J3
-
-        Js = [J1,J2,J3,J4,J5,J6,J7,J8]
-        q1,q2,q3,q4 = [],[],[],[]
-
-        for J in Js:
-            q1.append(J[1]/J[0])
-            q2.append(J[0]/J[1])
-            q3.append(J[1])
-            q4.append(J[0])
-
-        #løser systemet
-        sol = sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set,q1,q2,q3,q4,mu,points,lin_set,non_homog,inner)
-        S_mat.append(sol)
-        new_mu_list.append(mu)
-    
-    mu_list = []
-    for mu_1 in mu3:
-        for mu_2 in mu4:
-            for mu_3 in mu5:
-                for mu_4 in mu2:
-                    mu_list.append([mu_1,mu_2,mu_3,mu_4])
     
     r = process_map(multiiterator, mu_list, max_workers=32, chunksize=2)
     S_mat = np.asarray(S_mat)
@@ -912,58 +963,62 @@ if offline:
         Ay_rhs_r.append(RB1.T@Ay_rhs)
         Dx_rhs_r.append(RB3.T@Dx_rhs)
 
+    path = "submatrices_"+str(typ)
+    if not os.path.exists(path):
+        os.mkdir(path)
+
     #lagrer nødvendige matriser og vektorer
-    np.save('S_matrix',S_mat)
-    np.save('mu_list',new_mu_list)
-    np.save('Ax',Ax_set)
-    np.save('Ay',Ay_set)
-    np.save('Dx',Dx_set)
-    np.save('Dy',Dy_set)
-    np.save('Axrhs',Ax_rhs_set)
-    np.save('Ayrhs',Ay_rhs_set)
-    np.save('Dxrhs',Dx_rhs_set)
+    np.save(os.path.join(path,'S_matrix'),S_mat)
+    np.save(os.path.join(path,'mu_list'),new_mu_list)
+    np.save(os.path.join(path,'Ax'),Ax_set)
+    np.save(os.path.join(path,'Ay'),Ay_set)
+    np.save(os.path.join(path,'Dx'),Dx_set)
+    np.save(os.path.join(path,'Dy'),Dy_set)
+    np.save(os.path.join(path,'Axrhs'),Ax_rhs_set)
+    np.save(os.path.join(path,'Ayrhs'),Ay_rhs_set)
+    np.save(os.path.join(path,'Dxrhs'),Dx_rhs_set)
     #reduserte matriser
-    np.save('Axr1',Ax_r1)
-    np.save('Axr2',Ax_r2)
-    np.save('Ayr1',Ay_r1)
-    np.save('Ayr2',Ay_r2)
-    np.save('Dxr',Dx_r)
-    np.save('Dyr',Dy_r)
-    np.save('DxTr',DxT_r)
-    np.save('DyTr',DyT_r)
-    np.save('Axrhsr',Ax_rhs_r)
-    np.save('Ayrhsr',Ay_rhs_r)
-    np.save('Dxrhsr',Dx_rhs_r)
-    np.save('RB',RB_mat)
-    np.savetxt('eigvals.txt',s**2,delimiter=',')
+    np.save(os.path.join(path,'Axr1'),Ax_r1)
+    np.save(os.path.join(path,'Axr2'),Ax_r2)
+    np.save(os.path.join(path,'Ayr1'),Ay_r1)
+    np.save(os.path.join(path,'Ayr2'),Ay_r2)
+    np.save(os.path.join(path,'Dxr'),Dx_r)
+    np.save(os.path.join(path,'Dyr'),Dy_r)
+    np.save(os.path.join(path,'DxTr'),DxT_r)
+    np.save(os.path.join(path,'DyTr'),DyT_r)
+    np.save(os.path.join(path,'Axrhsr'),Ax_rhs_r)
+    np.save(os.path.join(path,'Ayrhsr'),Ay_rhs_r)
+    np.save(os.path.join(path,'Dxrhsr'),Dx_rhs_r)
+    np.save(os.path.join(path,'RB'),RB_mat)
+    np.savetxt(os.path.join(path,'eigvals.txt'),s**2,delimiter=',')
     
 else:
+    path = "submatrices_"+str(typ)
     #laster inn lagrede matriser
-    S_mat = np.load('S_matrix.npy',allow_pickle=True)
-    mu_list = np.load('mu_list.npy',allow_pickle=True)
-    Ax_set = np.load('Ax.npy',allow_pickle=True)
-    Ay_set = np.load('Ay.npy',allow_pickle=True)
-    Dx_set = np.load('Dx.npy',allow_pickle=True)
-    Dy_set = np.load('Dy.npy',allow_pickle=True)
-    Ax_rhs_set = np.load('Axrhs.npy',allow_pickle=True)
-    Ay_rhs_set = np.load('Ayrhs.npy',allow_pickle=True)
-    Dx_rhs_set = np.load('Dxrhs.npy',allow_pickle=True)
+    S_mat = np.load(os.path.join(path,'S_matrix.npy'),allow_pickle=True)
+    mu_list = np.load(os.path.join(path,'mu_list.npy'),allow_pickle=True)
+    Ax_set = np.load(os.path.join(path,'Ax.npy'),allow_pickle=True)
+    Ay_set = np.load(os.path.join(path,'Ay.npy'),allow_pickle=True)
+    Dx_set = np.load(os.path.join(path,'Dx.npy'),allow_pickle=True)
+    Dy_set = np.load(os.path.join(path,'Dy.npy'),allow_pickle=True)
+    Ax_rhs_set = np.load(os.path.join(path,'Axrhs.npy'),allow_pickle=True)
+    Ay_rhs_set = np.load(os.path.join(path,'Ayrhs.npy'),allow_pickle=True)
+    Dx_rhs_set = np.load(os.path.join(path,'Dxrhs.npy'),allow_pickle=True)
     #reduserte matriser
-    Ax_r1 = np.load('Axr1.npy',allow_pickle=True)
-    Ax_r2 = np.load('Axr2.npy',allow_pickle=True)
-    Ay_r1 = np.load('Ayr1.npy',allow_pickle=True)
-    Ay_r2 = np.load('Ayr2.npy',allow_pickle=True)
-    Dx_r  = np.load('Dxr.npy',allow_pickle=True)
-    Dy_r  = np.load('Dyr.npy',allow_pickle=True)
-    DxT_r = np.load('DxTr.npy',allow_pickle=True)
-    DyT_r = np.load('DyTr.npy',allow_pickle=True)
-    Ax_rhs_r = np.load('Axrhsr.npy',allow_pickle=True)
-    Ay_rhs_r = np.load('Ayrhsr.npy',allow_pickle=True)
-    Dx_rhs_r = np.load('Dxrhsr.npy',allow_pickle=True)
-    RB_mat= np.load('RB.npy',allow_pickle=True)
-    eigenvalues = np.loadtxt('eigvals.txt',delimiter=',')
+    Ax_r1 = np.load(os.path.join(path,'Axr1.npy'),allow_pickle=True)
+    Ax_r2 = np.load(os.path.join(path,'Axr2.npy'),allow_pickle=True)
+    Ay_r1 = np.load(os.path.join(path,'Ayr1.npy'),allow_pickle=True)
+    Ay_r2 = np.load(os.path.join(path,'Ayr2.npy'),allow_pickle=True)
+    Dx_r  = np.load(os.path.join(path,'Dxr.npy'),allow_pickle=True)
+    Dy_r  = np.load(os.path.join(path,'Dyr.npy'),allow_pickle=True)
+    DxT_r = np.load(os.path.join(path,'DxTr.npy'),allow_pickle=True)
+    DyT_r = np.load(os.path.join(path,'DyTr.npy'),allow_pickle=True)
+    Ax_rhs_r = np.load(os.path.join(path,'Axrhsr.npy'),allow_pickle=True)
+    Ay_rhs_r = np.load(os.path.join(path,'Ayrhsr.npy'),allow_pickle=True)
+    Dx_rhs_r = np.load(os.path.join(path,'Dxrhsr.npy'),allow_pickle=True)
+    RB_mat= np.load(os.path.join(path,'RB.npy'),allow_pickle=True)
+    eigenvalues = np.loadtxt(os.path.join(path,'eigvals.txt'),delimiter=',')
 
-    plot_eigenvalues = False
     if plot_eigenvalues:
         plt.figure()
         plt.semilogy(range(len(eigenvalues)),eigenvalues)
@@ -972,24 +1027,35 @@ else:
         plt.xlabel("$\lambda_i$")
         plt.savefig("Eigenvalues", dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
 
-    J1 = [mu[0]+1,2*mu[2] +1]
-    J2 = [1,2*mu[2] +1]
-    J3 = [mu[1]+1,2*mu[2] +1]
-    J4 = [mu[0]+1,1]
-    J5 = [mu[1]+1,1]
-    J6 = J1
-    J7 = J2
-    J8 = J3
+    #HER MÅ OGSÅ JAKOBIANTER ENDRES!!
+    if typ == 5:
+        J1 = [mu[0]+1,2*mu[2] +1]
+        J2 = [1,2*mu[2] +1]
+        J3 = [mu[1]+1,2*mu[2] +1]
+        J4 = [mu[0]+1,1]
+        J5 = [mu[1]+1,1]
+        J6 = J1
+        J7 = J2
+        J8 = J3
 
-    Js = [J1,J2,J3,J4,J5,J6,J7,J8]
+        Js = [J1,J2,J3,J4,J5,J6,J7,J8]
+
+    elif typ == 6:
+        J1 = [1,mu[0] +1]
+        J2 = [1,1-mu[0] + (2*mu[1])/(1-mu[0]) - (2*mu[1]*mu[0])/(1-mu[0])]
+
+        Js = [J1,J2]
+    
     q1,q2,q3,q4 = [],[],[],[]
 
-    for J in Js:
+    for J in Js:        
         q1.append(J[1]/J[0])
         q2.append(J[0]/J[1])
         q3.append(J[1])
         q4.append(J[0])
-
+            
+    q_list = [q1,q2,q3,q4]
+    
     #k = 0
     #for i,mui in enumerate(mu_list):
     #    if all(mui == mu):
@@ -997,25 +1063,36 @@ else:
     #orig_sol = S_mat[k]
 
     start_time = time.time()
-    orig_sol = sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set,q1,q2,q3,q4,mu,points,lin_set,non_homog,inner)
+    orig_sol = sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set,q_list,mu,points,lin_set,non_homog,inner)
     print("FOM solver time:", time.time()- start_time)
 
     start_time = time.time()
-    red_sol = reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_r,Dx_rhs_r,q1,q2,q3,q4,mu,points,non_homog)
+    red_sol = reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_r,Dx_rhs_r,q_list,mu,points,non_homog)
     print(red_sol.shape)
     print("ROM solver time:", time.time()- start_time)
 
-    cond1 = points[:,0] < .45
-    cond2 = points[:,0] > .55
-    cond3 = points[:,1] > .15
-    cond4 = points[:,1] < .05
-    points[cond1,0] = mu[0]*(points[cond1,0]-.45) + points[cond1,0]
-    points[cond2,0] = mu[1]*(points[cond2,0]-.55) + points[cond2,0]
-    points[cond3,1] = mu[2]*2*(points[cond3,1]-.15) + points[cond3,1]
-    points[cond4,1] = mu[2]*2*(points[cond4,1]-.05) + points[cond4,1]
+    if typ == 5:
+        cond1 = points[:,0] < .45
+        cond2 = points[:,0] > .55
+        cond3 = points[:,1] > .15
+        cond4 = points[:,1] < .05
+        points[cond1,0] = mu[0]*(points[cond1,0]-.45) + points[cond1,0]
+        points[cond2,0] = mu[1]*(points[cond2,0]-.55) + points[cond2,0]
+        points[cond3,1] = mu[2]*2*(points[cond3,1]-.15) + points[cond3,1]
+        points[cond4,1] = mu[2]*2*(points[cond4,1]-.05) + points[cond4,1]
 
-    y_n = points[non_homog,1]
-    lift = -(mu[3]/((1 + mu[2])**2))*(10*y_n+mu[2])*(10*y_n-(2+mu[2]))
+        y_n = points[non_homog,1]
+        lift = -(mu[3]/((1 + mu[2])**2))*(10*y_n+mu[2])*(10*y_n-(2+mu[2]))
+
+    elif typ == 6:
+        cond1 = points[:,1] <= .2
+        cond2 = points[:,1] > .2
+        points[cond1,1] = (mu[0]+1)*points[cond1,1]
+        points[cond2,1] = (1-mu[0])*points[cond2,1] + 0.4*mu[0]
+        cond3 = points[:,1] >= (1+mu[0])*.2
+        points[cond3,1] = (1/(1-mu[0]))*2*mu[1]*(points[cond3,1]-(1+mu[0])*.2) + points[cond3,1]
+        y_n = points[non_homog,1]
+        lift = -(mu[2]/((1 + mu[1])**2))*(10*y_n+mu[1])*(10*y_n-(4+mu[1]))
 
     ux_o,uy_o,p_o = solHelper(orig_sol,lift,inner,points,non_homog)
     ux,uy,p = solHelper2(red_sol,RB_mat,points,non_homog,inner,lift)
@@ -1034,10 +1111,23 @@ else:
     press_red = p
     tri2 = plotHelp(points[lin_set],N,1)
 
-    contourPlotter(vel_mag_orig,tri1,title = "Velocity magnitude original, $\mu$ = "+str(mu),fname = "aa_original_velocity_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
-    contourPlotter(press_orig,tri2,title = "Pressure original, $\mu$ = "+str(mu),fname = "aa_original_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
-    contourPlotter(vel_mag_red,tri1,title = "Velocity magnitude reduced, $\mu$ = "+str(mu),fname = "aa_reduced_velocity"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
-    contourPlotter(press_red,tri2,title = "Pressure reduced, $\mu$ = "+str(mu),fname = "aa_reduced_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
+    plt.figure()
+    plotElements(points,elements)
+    plt.title('Domain w/bilinear and biquadratic elements')
+    plt.axis('scaled')
+    plt.savefig("aaa_type"+str(typ), dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
+
+
+    if typ == 5:
+        contourPlotter(vel_mag_orig,tri1,title = "Velocity magnitude original, $\mu$ = "+str(mu),fname = "aa_original_velocity_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
+        contourPlotter(press_orig,tri2,title = "Pressure original, $\mu$ = "+str(mu),fname = "aa_original_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
+        contourPlotter(vel_mag_red,tri1,title = "Velocity magnitude reduced, $\mu$ = "+str(mu),fname = "aa_reduced_velocity"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
+        contourPlotter(press_red,tri2,title = "Pressure reduced, $\mu$ = "+str(mu),fname = "aa_reduced_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
+    elif typ == 6:
+        contourPlotter(vel_mag_orig,tri1,title = "Velocity magnitude original, $\mu$ = "+str(mu),fname = "aa_original_velocity_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
+        contourPlotter(press_orig,tri2,title = "Pressure original, $\mu$ = "+str(mu),fname = "aa_original_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
+        contourPlotter(vel_mag_red,tri1,title = "Velocity magnitude reduced, $\mu$ = "+str(mu),fname = "aa_reduced_velocity"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
+        contourPlotter(press_red,tri2,title = "Pressure reduced, $\mu$ = "+str(mu),fname = "aa_reduced_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
     plt.close('all')
    
 '''
