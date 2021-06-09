@@ -6,58 +6,56 @@ import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 import time
 from itertools import chain
-
+import os
 import scipy.spatial as spsa
 import scipy.sparse as sp
 from scipy.sparse.linalg import spsolve as solver
-import second_attempt as arch
+import third_attempt as arch
 
-N = 4
-typ = 0
-amp = 10
-mu = [0,1,2,1]
+N = 5
 
-y_n = arch.get_velocity_type(N,typ,mu[0])
-inlet_velocity = amp*(y_n+mu[0]*.1)*(mu[0]*.1+.2-y_n)
+vel = 2
+types = [5,6,5,6]
+mus = [[.5,.5,1],[0.5,0],[0,0,.5],[0,-.25]]
+xi = 0
+yi = 0
 
-for i in range(len(mu)-1):
-    ux_i,uy_i,p_i,pts_i,els_i,lin_set_i,neu_i = arch.initialize(inlet_velocity,N=N,typ=typ,mu3 = mu[i],mu4 = mu[i+1])
-    inlet_velocity = ux_i[neu_i]
-    if i != 0:
-        pts_i[:,0] += p_pts[:,0].max()
-        p += p_i.max()
-        ux = np.concatenate((ux,ux_i))
-        uy = np.concatenate((uy,uy_i))
-        ux_r = np.concatenate((ux_r,ux_i[lin_set_i]))
-        uy_r = np.concatenate((uy_r,uy_i[lin_set_i]))
+ux = []
+uy = []
+p = []
 
-        p = np.concatenate((p,p_i))
-        p_pts = np.concatenate((p_pts,pts_i[lin_set_i]))
-        v_pts = np.concatenate((v_pts,pts_i))
+start_time = time.time()
+i = 0
+for typ,mu in zip(types,mus):
+    mu.append(vel)
+    ux_i,uy_i,p_i,points_i,lin_points_i, neu = arch.get_archetype(N,typ,mu,xi,yi)
+    if i == 0:
+        points = points_i
+        lin_points = lin_points_i
     else:
-        ux = ux_i
-        uy = uy_i
-        ux_r = ux_i[lin_set_i]
-        uy_r = uy_i[lin_set_i]
-        p = p_i
-        p_pts = pts_i[lin_set_i]
-        v_pts = pts_i
+        points = np.concatenate((points,points_i))
+        lin_points = np.concatenate((lin_points,lin_points_i))
+    xi = points_i[:,0].max()
+    yi = points_i[:,1].min()
+    vel = ux_i[neu].max()
+    ux = np.concatenate((ux,ux_i))
+    uy = np.concatenate((uy,uy_i))
+    p += p_i[0]
+    p = np.concatenate((p,p_i))
+    i += 1
 
-p_tri = arch.plotHelp(p_pts,N-1,max(mu))
-v_tri = arch.plotHelp(v_pts,N,max(mu))
+print("TIME:", time.time()-start_time)
 
-#figur 1
-arch.contourPlotter(p,p_tri,title = "Velocity and pressure",save = False,cbar = True)
-arch.quiverPlotter(ux_r,uy_r,p_pts,fname="figur1_type"+str(typ), newfig = False)
+p_tri = arch.plotHelp(lin_points,N-1,1.5,coord_mask = False)
+v_tri = arch.plotHelp(points,N,1.5,coord_mask = False)
+
 #figur2, x-hastighet
-arch.contourPlotter(ux,v_tri,title="x-velocity, $u_x$",fname="figur2_type"+str(typ))
+arch.contourPlotter(ux,v_tri,title="x-velocity, $u_x$",fname="combo_figur1",HD = True)
 #figur3, y-hastighet
-arch.contourPlotter(uy,v_tri,title="y-velocity, $u_y$",fname="figur3_type"+str(typ))
+arch.contourPlotter(uy,v_tri,title="y-velocity, $u_y$",fname="combo_figur2",HD = True)
 #figur4, hastighetsmagnitude
-arch.contourPlotter(np.sqrt(ux**2 + uy**2),v_tri,title="Velocity-magnitude, $|u|$",fname="figur4_type"+str(typ))
-#figur5, hastighetsfelt
-arch.quiverPlotter(ux,uy,v_pts,fname="figur5_type"+str(typ),title= "Velocity-field")
+arch.contourPlotter(np.sqrt(ux**2 + uy**2),v_tri,title="Velocity-magnitude, $|u|$",fname="combo_figur3",HD = True)
 #figur6, trykk
-arch.contourPlotter(p,p_tri,title="Pressure, p",fname="figur6_type"+str(typ))
+arch.contourPlotter(p,p_tri,title="Pressure, p",fname="combo_figur4",HD = True)
 
 plt.close('all')
