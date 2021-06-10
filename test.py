@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 import time
+import os
 
 import scipy.spatial as spsa
 import scipy.sparse as sp
@@ -698,7 +699,7 @@ def sparsesolver3(bilin,lin,N,dirichlet,qs):
     solution[dirichlet] = 0
     return solution
 
-'''
+
 
 
 def typeSixBdry(points,N):
@@ -856,3 +857,187 @@ plt.close('all')
 #plt.axis('scaled')
 #plt.savefig("aaa_type"+str(1), dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
 
+'''
+
+'''
+if something:
+    points_list = np.asarray(points_list)
+    i = 0
+    for S,points in zip(S_mat,points_list):
+        tri1 = plotHelp(points,N,1)
+        vel_mag = np.sqrt(S[:len(points)]**2 + S[len(points):2*len(points)]**2)
+        press = S[2*len(points):]
+        tri2 = plotHelp(points[lin_set],N,1)
+        contourPlotter(vel_mag,tri1,title = "Velocity magnitude",fname = "vel_"+str(i))
+        contourPlotter(press,tri2,title = "Pressure",fname = "press_"+str(i))
+        plt.close('all')
+        i += 1
+
+
+    J1 = [mu[0]+1,2*mu[2] +1]
+    J2 = [1,2*mu[2] +1]
+    J3 = [mu[1]+1,2*mu[2] +1]
+    J4 = [mu[0]+1,1]
+    J5 = [mu[1]+1,1]
+    J6 = J1
+    J7 = J2
+    J8 = J3
+
+    Js = [J1,J2,J3,J4,J5,J6,J7,J8]
+    q1,q2,q3,q4 = [],[],[],[]
+
+    for J in Js:
+        q1.append(J[1]/J[0])
+        q2.append(J[0]/J[1])
+        q3.append(J[1])
+        q4.append(J[0])
+
+
+    #cond1 = points[:,0] < .45
+    #   cond2 = points[:,0] > .55
+    #   cond3 = points[:,1] > .15
+    #cond4 = points[:,1] < .05
+    #points[cond1,0] = mu3*(points[cond1,0]-.45) + points[cond1,0]
+    #points[cond2,0] = mu4*(points[cond2,0]-.55) + points[cond2,0]
+    #points[cond3,1] = mu5*2*(points[cond3,1]-.15) + points[cond3,1]
+    #points[cond4,1] = mu5*2*(points[cond4,1]-.05) + points[cond4,1]
+
+    if __name__ != "__main__":
+        #variabler, mu1 er amplitude på hastighetsprofil, mu2 er dynamsik viskositet
+        mu1 = 150
+        mu2 = 10
+        mu3 = 0
+        mu4 = 0
+        mu5 = 2
+
+        #definerer basisfunksjoner
+        phi = lambda x,y,c,i: c[i][0] + c[i][1]*x + c[i][2]*y + c[i][3]*x*y + c[i][4]*(x**2) + c[i][5]*(y**2) + c[i][6]*(x**2)*y + c[i][7]*x*(y**2) +c[i][8]*(x**2)*(y**2)
+        phi_dx = lambda x,y,c,i: c[i][1] + c[i][3]*y + 2*c[i][4]*x + 2*c[i][6]*x*y + c[i][7]*(y**2) + 2*c[i][8]*x*(y**2)
+        phi_dy = lambda x,y,c,i: c[i][2] + c[i][3]*x + 2*c[i][5]*y + c[i][6]*(x**2) + 2*c[i][7]*x*y+ 2*c[i][8]*(x**2)*y
+
+        zeta = lambda x,y,c,i: c[i][0] + c[i][1]*x + c[i][2]*y +c[i][3]*x*y
+        zeta_dx = lambda x,y,c,i: c[i][1] + c[i][3]*y
+        zeta_dy = lambda x,y,c,i: c[i][2] + c[i][3]*x
+
+        a_bilin = lambda x,y,c,i,j: (1/mu1)*(phi_dx(x,y,c,j)*phi_dx(x,y,c,i) + phi_dy(x,y,c,j)*phi_dy(x,y,c,i))
+        b_bilin_x = lambda x,y,c1,c2,i,j: -phi_dx(x,y,c2,j)*zeta(x,y,c1,i)
+        b_bilin_y = lambda x,y,c1,c2,i,j: -phi_dy(x,y,c2,j)*zeta(x,y,c1,i)
+
+        #generer noder, elementer, kanter og indre noder
+        N = 4
+        #type domene: 0, 1, 2, 3, 4, 5
+        typ = 5
+        points,elements,lin_set,non_homog,homog,neu,inner = createDomain(N,typ)
+
+        for el in elements:
+            print(points[el[1][4]])
+
+        o1 = [0,.45]
+        o2 = [.55,1]
+        o3 = [.45,.55,.05,.15]
+        #o1 = [0,.4]
+        #o2 = [.4,.6]
+        #o3 = [.6,1]
+
+        cond1 = points[:,0] < o1[1]
+        cond2 = points[:,0] > o2[0]
+        cond3 = points[:,1] > o3[3]
+        cond4 = points[:,1] < o3[2]
+
+        points[cond1,0] = mu3*(points[cond1,0]-.45) + points[cond1,0]
+        points[cond2,0] = mu4*(points[cond2,0]-.55) + points[cond2,0]
+        points[cond3,1] = mu5*2*(points[cond3,1]-.15) + points[cond3,1]
+        points[cond4,1] = mu5*2*(points[cond4,1]-.05) + points[cond4,1]
+
+        #domain 0
+        #cond1 = np.logical_and(points[:,0] >= o1[0],points[:,0] < o1[1])
+        #cond2 = np.logical_and(points[:,0] >= o2[0],points[:,0] < o2[1])
+        #cond3 = np.logical_and(points[:,0] >= o3[0],points[:,0] <= o3[1])
+
+        #domain 0
+        #points[cond1,1] = mu3*(points[cond1,1]-.1) + points[cond1,1]
+        #points[cond2,1] = mu3*5*(o2[1]-points[cond2,0])*(points[cond2,1]-.1) + mu4*5*(points[cond2,0]-o2[0])*(points[cond2,1]-.1) + points[cond2,1]
+        #points[cond3,1] = mu4*(points[cond3,1]-.1) + points[cond3,1]
+
+        #bygger stivhets- og divergensmatrisene
+        A = createA(a_bilin,points,elements)
+        Dx = createD(b_bilin_x,points,elements)
+        Dy = createD(b_bilin_y,points,elements)
+
+        #definerer lifting-funksjonen
+        y_n = points[non_homog][:,1]
+
+        rg = mu2*((y_n+mu5*.1)*((mu5*.2)+.2-(y_n+mu5*.1)))/(0.2*mu5)
+
+        #fjerner nødvendige rader og kollonner
+        Ai = matrixShaver(A,inner,inner)
+        Dxi = matrixShaver(Dx,lin_set,inner)
+        Dyi = matrixShaver(Dy,lin_set,inner)
+        Gx = matrixShaver(Dx,lin_set,non_homog)
+        G = matrixShaver(A,inner,non_homog)
+
+        #lager høyresiden
+        fx = -G@rg
+        fy = np.zeros_like(fx)
+        fp = -Gx@rg
+        rhs = np.concatenate((fx,fy,fp))
+
+        #bygger blokkmatrisa og løser
+        Block = sp.bmat([[Ai,None,Dxi.T],[None,Ai,Dyi.T],[Dxi,Dyi,None]]).tocsr()
+        u_bar = solver(Block,rhs)
+        ux,uy,p = solHelper(u_bar,rg,inner,points,non_homog)
+
+        print("total out volumeflow")
+        if typ == 2:
+            print(sum(np.sqrt(ux[neu]**2 + uy[neu]**2))/len(neu)*(.2+.2*mu5))
+        else:
+            print(sum(np.sqrt(ux[neu]**2+uy[neu]**2))/len(neu)*(.2+.2*mu5))
+        print("total in volumeflow")
+        print(sum(np.sqrt(ux[non_homog]**2 + uy[non_homog]**2))/len(non_homog)*(.2+.2*mu5))
+
+        #generer triangulering og maskerer for enklere plotting 
+        tri1 = plotHelp(points,N,mu4+mu5)
+        tri2 = plotHelp(points[lin_set],N-1,mu4+mu5)
+        
+
+        #figur 0, domene
+        plt.figure()
+        plotElements(points,elements)
+        plt.title('Domain w/bilinear and biquadratic elements')
+        plt.axis('scaled')
+        plt.savefig("figur0_type"+str(typ), dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
+        #figur1, hastighetsfelt og trykk
+        contourPlotter(p,tri2,title = "Velocity and pressure",save = False)
+        quiverPlotter(ux[lin_set],uy[lin_set],points[lin_set],fname="figur1_type"+str(typ), newfig = False)
+        #figur2, x-hastighet
+        contourPlotter(ux,tri1,title="x-velocity, $u_x$",fname="figur2_type"+str(typ))
+        #figur3, y-hastighet
+        contourPlotter(uy,tri1,title="y-velocity, $u_y$",fname="figur3_type"+str(typ))
+        #figur4, hastighetsmagnitude
+        contourPlotter(np.sqrt(ux**2 + uy**2),tri1,title="Velocity-magnitude, $|u|$",fname="figur4_type"+str(typ))
+        #figur5, hastighetsfelt
+        quiverPlotter(ux,uy,points,fname="figur5_type"+str(typ),title= "Velocity-field")
+        #figur6, trykk
+        contourPlotter(p,tri2,title="Pressure, p",fname="figur6_type"+str(typ))
+
+        plt.close('all')
+'''
+
+a = np.asarray([i for i in range(100)])
+b = [3,5,7,10,12,16]
+mask = np.ones(len(a), np.bool)
+mask[b] = 0
+a_new = a[mask]
+
+test = np.asarray([[0,-1],[1,0]])
+
+point = np.asarray([[3,10],[3,10],[3,10],[3,10],[3,10]])
+
+for i in range(len(point)):
+    point[i] = test@point[i]
+
+print(point)
+
+
+print(a[b])
+print(a_new)
