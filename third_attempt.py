@@ -392,10 +392,12 @@ def apply_mask(triang,p, alpha=0.1,coord_mask = False):
     if coord_mask:
         x = p[triang.triangles,0].mean(axis=1) 
         y = p[triang.triangles,1].mean(axis=1)
-
-        if typ == 0:
-            return
         
+        if typ == 1 or typ == 2:
+            cond1 = np.logical_and(x < .4,y > .2)
+            cond2 = np.logical_and(x > .4+.2*(1+mu[2]), y > .2)
+            mask = np.logical_or(cond1,cond2)
+
         elif typ == 3:
             mask = np.logical_and(x < .4,y > .2)
         
@@ -411,6 +413,7 @@ def apply_mask(triang,p, alpha=0.1,coord_mask = False):
         elif typ == 7:
             cond1 = np.logical_and(x < .4, y > (1+mu[0])*.2)
             mask = cond1
+
         # apply masking
         triang.set_mask(mask)
     
@@ -626,6 +629,15 @@ def omega(p,typ):
     y = p[1]
     if typ == 0:
         return 0
+    elif typ == 1 or typ == 2:
+        if x < .4 and y <= .2:
+            return 0
+        elif x >= .4 and y <= .2 and x < .6:
+            return 1
+        elif x >= .4 and y > .2 and x < .6:
+            return 2
+        elif x >= .6 and y <= .2:
+            return 3
     elif typ == 3:
         if x < .4 and y <= .2:
             return 0
@@ -689,6 +701,13 @@ def sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set,q_
         for i,y in enumerate(y_n):
             if omega([0,y],typ) == 0:
                 rg[i] = (.2*(1+mu[1])-y2(y,mu))*(y2(y,mu))
+    
+    elif typ == 1 or typ == 2:
+        y2 = lambda y,mu: (1+mu[1])*y - .2*mu[1]
+        c = (100*mu[5])/((1+mu[1])**2)
+        for i,y in enumerate(y_n):
+            if omega([0,y],typ) == 0:
+                rg[i] = (0.2-y2(y,mu))*(y2(y,mu)+0.2*mu[1])
 
     elif typ == 3:
         y2 = lambda y,mu: (1+mu[1])*y - 0.2*mu[1]
@@ -770,6 +789,13 @@ def reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_
             if omega([0,y],typ) == 0:
                 rg[i] = (.2*(1+mu[1])-y2(y,mu))*(y2(y,mu))
 
+    elif typ == 1 or typ == 2:
+        y2 = lambda y,mu: (1+mu[1])*y - .2*mu[1]
+        c = (100*mu[5])/((1+mu[1])**2)
+        for i,y in enumerate(y_n):
+            if omega([0,y],typ) == 0:
+                rg[i] = (0.2-y2(y,mu))*(y2(y,mu)+0.2*mu[1])
+
     elif typ == 3:
         y2 = lambda y,mu: (1+mu[1])*y - 0.2*mu[1]
         c = (100*mu[4])/((1+mu[1])**2)
@@ -824,6 +850,14 @@ def multiiterator(mu):
 
         Js = [J1]
     
+    elif typ == 1 or typ == 2:
+        J1 = [1+mu[0],1+mu[1]]
+        J2 = [1+mu[2],1+mu[1]]
+        J3 = [1+mu[2],1+mu[3]]
+        J4 = [1+mu[4],1+mu[1]]
+
+        Js = [J1,J2,J3,J4]
+
     elif typ == 3:
         J1 = [1+mu[0],1+mu[1]]
         J2 = [1+mu[2],1+mu[3]]
@@ -864,14 +898,17 @@ def multiiterator(mu):
     new_mu_list.append(mu)
 
 if __name__ == "__main__":
-    offline = False
+    offline =False
     plot_eigenvalues = False
     plot_original = True
     #archetype 0
-    mu = [-.5,.5,4]
-    subdomains = 1
+    #mu = [-.5,.5,4]
+    #subdomains = 1
+    #archetype 1,2
+    mu = [-.5,-.5,-.5,-.5,-.5,1] #length pre bifurcation, inlet and outlet width,bifurcation outlet width,length scale bifurcation,length scale post bifurcation,amplitude
+    subdomains = 4
     #archetype 3
-    #mu = [0,0,0,1]
+    #mu = [0,0,0,0,1] #length pre corner, width inlet, width outlet, lemgth post corner, amplitude
     #subdomains = 3
     #archetype 5
     #mu = [0,0,0,1] #length pre-hole, length post_hole, width, amplitude
@@ -881,7 +918,7 @@ if __name__ == "__main__":
     #subdomains = 2
     N = 5
     #type domene: 0, 1, 2, 3, 4, 5, 6, 7
-    typ = 0
+    typ = 1
     points,elements,lin_set,non_homog,homog,neu,inner = createDomain(N,typ)
     
     #my-verdier må legges til for hver archetype
@@ -893,6 +930,17 @@ if __name__ == "__main__":
             mu3 = [1,4,7,10]
             mu_list = []
             for my in product(mu1,mu2,mu3):
+                mu_list.append(my)
+
+        elif typ == 1 or typ == 2:
+            mu1 = [-.5,0,1] #length scale pre bifurcation
+            mu2 = [-.5,0,1] #inlet and outlet width
+            mu3 = [-.5,0,1] #bifurcation outlet width
+            mu4 = [-.5,0,1] #length scale bifurcation 
+            mu5 = [-.5,0,1] #length scale post bifurcation
+            mu6 = [1,5,10] #amplitude of inlet velocity profile
+            mu_list = []
+            for my in product(mu1,mu2,mu3,mu4,mu5,mu6):
                 mu_list.append(my)
 
         elif typ == 3:
@@ -1093,6 +1141,13 @@ if __name__ == "__main__":
 
             Js = [J1]
         
+        elif typ == 1 or typ == 2:
+            J1 = [1+mu[0],1+mu[1]]
+            J2 = [1+mu[2],1+mu[1]]
+            J3 = [1+mu[2],1+mu[3]]
+            J4 = [1+mu[4],1+mu[1]]
+
+            Js = [J1,J2,J3,J4]
         elif typ == 3:
             J1 = [mu[0]+1,mu[1] +1]
             J2 = [mu[2]+1,mu[3] +1]
@@ -1144,6 +1199,28 @@ if __name__ == "__main__":
             y_n = points[non_homog,1]
             lift = -(100*mu[2]/((1 + mu[1])**2))*y_n*(y_n-0.2*(1+mu[1]))
 
+        elif typ == 1 or typ == 2:
+            cond1 = points[:,0] < .4
+            cond2 = np.logical_and(points[:,0] >= .4,points[:,0] <= .60005) 
+            cond3 = points[:,1] > .2 
+            cond4 = points[:,0] > .60005
+            cond5 = points[:,1] <= .2
+
+            points[cond1,0] = (1+mu[0])*points[cond1,0] - 0.4*mu[0]
+            temp2 = (1+mu[2])*points[cond2,0] - 0.4*mu[2]
+            temp4 = (1+mu[4])*points[cond4,0] - (0.6+0.2*mu[2])*mu[4] + 0.1*mu[2]
+            if mu[2] < 0:
+                points[cond2,0] = temp2
+                points[cond4,0] = temp4
+            else:
+                points[cond4,0] = temp4
+                points[cond2,0] = temp2
+            points[cond3,1] = (1+mu[3])*points[cond3,1] - .2*mu[3]
+            points[cond5,1] = (1+mu[1])*points[cond5,1] - .2*mu[1]
+
+            y_n = points[non_homog,1]
+            lift = (100*mu[5]/((1 + mu[1])**2))*(0.2-y_n)*(y_n+0.2*mu[1])
+
         elif typ == 3:
             cond1 = points[:,0] < .4
             cond2 = points[:,1] < .2
@@ -1188,8 +1265,8 @@ if __name__ == "__main__":
 
             print("----------------DISCRETE L2 NORMS--------------------")
             print(np.linalg.norm(ux-ux_o)/np.linalg.norm(ux_o))
-            print(np.linalg.norm(uy-uy_o)/np.linalg.norm(ux_o))
-            print(np.linalg.norm(p-p_o)/np.linalg.norm(ux_o))
+            print(np.linalg.norm(uy-uy_o)/np.linalg.norm(uy_o))
+            print(np.linalg.norm(p-p_o)/np.linalg.norm(p_o))
             
             vel_mag_orig = vel_mag_orig = np.sqrt(ux_o**2 + uy_o**2)
             press_orig = p_o
@@ -1197,8 +1274,8 @@ if __name__ == "__main__":
         vel_mag_red = vel_mag_red = np.sqrt(ux**2 + uy**2)
         press_red = p
 
-        tri1 = plotHelp(points,N,1)
-        tri2 = plotHelp(points[lin_set],N,1)
+        tri1 = plotHelp(points,N,1,coord_mask=True)
+        tri2 = plotHelp(points[lin_set],N,1,coord_mask = True)
 
         plt.figure()
         plotElements(points,elements)
@@ -1214,6 +1291,13 @@ if __name__ == "__main__":
             contourPlotter(vel_mag_red,tri1,title = "Velocity magnitude reduced, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_reduced_velocity"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
             contourPlotter(press_red,tri2,title = "Pressure reduced, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_reduced_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
         
+        elif typ == 1 or typ == 2:
+            if plot_original:
+                contourPlotter(vel_mag_orig,tri1,title = "|u| original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_velocity_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+str(mu[5])+".png")
+                contourPlotter(press_orig,tri2,title = "p original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+str(mu[5])+".png")
+            contourPlotter(vel_mag_red,tri1,title = "|u| reduced, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_reduced_velocity"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+str(mu[5])+".png")
+            contourPlotter(press_red,tri2,title = "p reduced, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_reduced_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+str(mu[5])+".png")
+
         elif typ == 3:
             if plot_original:
                 contourPlotter(vel_mag_orig,tri1,title = "Velocity magnitude original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_velocity_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+".png")
@@ -1282,6 +1366,46 @@ def get_archetype(N,typ,mu):
 
         y_n = points[non_homog,1]
         lift = -(100*mu[2]/((1 + mu[1])**2))*y_n*(y_n-0.2*(1+mu[1]))
+
+    elif typ == 1 or typ == 2:
+        J1 = [1+mu[0],1+mu[1]]
+        J2 = [1+mu[2],1+mu[1]]
+        J3 = [1+mu[2],1+mu[3]]
+        J4 = [1+mu[4],1+mu[1]]
+
+        Js = [J1,J2,J3,J4]
+        q1,q2,q3,q4 = [],[],[],[]
+
+        for J in Js:        
+            q1.append(J[1]/J[0])
+            q2.append(J[0]/J[1])
+            q3.append(J[1])
+            q4.append(J[0])
+                
+        q_list = [q1,q2,q3,q4]
+
+        red_sol = reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_r,Dx_rhs_r,q_list,mu,points,non_homog,typ)
+    
+        cond1 = points[:,0] < .4
+        cond2 = np.logical_and(points[:,0] >= .4,points[:,0] <= .60005) 
+        cond3 = points[:,1] > .2 
+        cond4 = points[:,0] > .60005
+        cond5 = points[:,1] <= .2
+
+        points[cond1,0] = (1+mu[0])*points[cond1,0] - 0.4*mu[0]
+        temp2 = (1+mu[2])*points[cond2,0] - 0.4*mu[2]
+        temp4 = (1+mu[4])*points[cond4,0] - (0.6+0.2*mu[2])*mu[4] + 0.1*mu[2]
+        if mu[2] < 0:
+            points[cond2,0] = temp2
+            points[cond4,0] = temp4
+        else:
+            points[cond4,0] = temp4
+            points[cond2,0] = temp2
+        points[cond3,1] = (1+mu[3])*points[cond3,1] - .2*mu[3]
+        points[cond5,1] = (1+mu[1])*points[cond5,1] - .2*mu[1]
+
+        y_n = points[non_homog,1]
+        lift = (100*mu[5]/((1 + mu[1])**2))*(0.2-y_n)*(y_n+0.2*mu[1])
 
     elif typ == 3 or typ == 4:
         J1 = [1+mu[0],mu[1] +1]
