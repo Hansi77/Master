@@ -2,6 +2,7 @@ from tqdm.contrib.concurrent import process_map
 from multiprocessing import Manager
 import sys
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 import time
@@ -392,8 +393,9 @@ def apply_mask(triang,p, alpha=0.1,coord_mask = False):
     if coord_mask:
         x = p[triang.triangles,0].mean(axis=1) 
         y = p[triang.triangles,1].mean(axis=1)
-        
-        if typ == 1 or typ == 2:
+        if typ == 0:
+            mask = y < -.5
+        elif typ == 1 or typ == 2:
             cond1 = np.logical_and(x < .4,y > .2)
             cond2 = np.logical_and(x > .4+.2*(1+mu[2]), y > .2)
             mask = np.logical_or(cond1,cond2)
@@ -900,25 +902,26 @@ def multiiterator(mu):
 if __name__ == "__main__":
     offline =False
     plot_eigenvalues = False
-    plot_original = True
-    #archetype 0
-    #mu = [-.5,.5,4]
-    #subdomains = 1
-    #archetype 1,2
-    mu = [-.5,-.5,-.5,-.5,-.5,1] #length pre bifurcation, inlet and outlet width,bifurcation outlet width,length scale bifurcation,length scale post bifurcation,amplitude
-    subdomains = 4
-    #archetype 3
-    #mu = [0,0,0,0,1] #length pre corner, width inlet, width outlet, lemgth post corner, amplitude
-    #subdomains = 3
-    #archetype 5
-    #mu = [0,0,0,1] #length pre-hole, length post_hole, width, amplitude
-    #subdomains = 8
-    #archetype 6 / 7
-    #mu = [0,0,1] #width outlet, width inlet, amplitude / width inlet, width outlet, amplitude
-    #subdomains = 2
+    plot_original = False
+    
     N = 5
     #type domene: 0, 1, 2, 3, 4, 5, 6, 7
-    typ = 1
+    typ = 7
+    #archetype 0 #length,width
+    #mu = [.5,.1,3]
+    #subdomains = 1
+    #archetype 1,2
+    #mu = [-.5,0,0,-.5,1,7] #length pre bifurcation, inlet and outlet width,bifurcation outlet width,length scale bifurcation,length scale post bifurcation,amplitude
+    #subdomains = 4
+    #archetype 3
+    #mu = [-.5,1,-.5,0,1] #length pre corner, width inlet, width outlet, lemgth post corner, amplitude
+    #subdomains = 3
+    #archetype 5
+    #mu = [0,0,1,1] #length pre-hole, length post_hole, width, amplitude
+    #subdomains = 8
+    #archetype 6 / 7
+    mu = [.2,-.3,5] #width outlet, width inlet, amplitude / width inlet, width outlet, amplitude
+    subdomains = 2
     points,elements,lin_set,non_homog,homog,neu,inner = createDomain(N,typ)
     
     #my-verdier må legges til for hver archetype
@@ -1285,41 +1288,50 @@ if __name__ == "__main__":
 
         if typ == 0:
             if plot_original:
-                #quiverPlotter(uxo,uyo,po.T,title = "Quiverplot",fname="type_0_quiver.png")
-                contourPlotter(vel_mag_orig,tri1,title = "Velocity magnitude original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_velocity_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
-                contourPlotter(press_orig,tri2,title = "Pressure original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
-            contourPlotter(vel_mag_red,tri1,title = "Velocity magnitude reduced, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_reduced_velocity"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
-            contourPlotter(press_red,tri2,title = "Pressure reduced, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_reduced_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
+                contourPlotter(ux_o,tri1,title = "$u_x$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_ux_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
+                contourPlotter(uy_o,tri1,title = "$u_y$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uy_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
+                contourPlotter(vel_mag_orig,tri1,title = "$|u|$, $\mu$  = "+str(mu),fname = "type_"+str(typ)+"_abs_u_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
+                contourPlotter(press_orig,tri2,title = "$p$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_p_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
+            contourPlotter(ux,tri1,title = "$u_{x,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uxr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
+            contourPlotter(uy,tri1,title = "$u_{y,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uyr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")      
+            contourPlotter(vel_mag_red,tri1,title = "$|u_r|$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_abs_ur_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
+            contourPlotter(press_red,tri2,title = "$p_r$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_pr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
         
         elif typ == 1 or typ == 2:
             if plot_original:
                 contourPlotter(vel_mag_orig,tri1,title = "|u| original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_velocity_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+str(mu[5])+".png")
-                contourPlotter(press_orig,tri2,title = "p original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+str(mu[5])+".png")
-            contourPlotter(vel_mag_red,tri1,title = "|u| reduced, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_reduced_velocity"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+str(mu[5])+".png")
-            contourPlotter(press_red,tri2,title = "p reduced, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_reduced_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+str(mu[5])+".png")
+                contourPlotter(press_orig,tri2,title = "p original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+"_"+str(mu[5])+".png")
+            contourPlotter(ux,tri1,title = "$u_{x,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uxr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+"_"+str(mu[5])+".png")
+            contourPlotter(uy,tri1,title = "$u_{y,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uyr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+"_"+str(mu[5])+".png")      
+            contourPlotter(vel_mag_red,tri1,title = "$|u_r|$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_abs_ur_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+"_"+str(mu[5])+".png")
+            contourPlotter(press_red,tri2,title = "$p_r$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_pr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+"_"+str(mu[5])+".png")
 
         elif typ == 3:
             if plot_original:
                 contourPlotter(vel_mag_orig,tri1,title = "Velocity magnitude original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_velocity_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+".png")
                 contourPlotter(press_orig,tri2,title = "Pressure original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+".png")
-            contourPlotter(vel_mag_red,tri1,title = "Velocity magnitude reduced, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_reduced_velocity"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+".png")
-            contourPlotter(press_red,tri2,title = "Pressure reduced, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_reduced_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+".png")
-        
+            contourPlotter(ux,tri1,title = "$u_{x,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uxr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+".png")
+            contourPlotter(uy,tri1,title = "$u_{y,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uyr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+".png")      
+            contourPlotter(vel_mag_red,tri1,title = "$|u_r|$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_abs_ur_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+".png")
+            contourPlotter(press_red,tri2,title = "$p_r$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_pr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+".png")
+       
         elif typ == 5:
             if plot_original:
                 contourPlotter(vel_mag_orig,tri1,title = "Velocity magnitude original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_velocity_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
                 contourPlotter(press_orig,tri2,title = "Pressure original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
-            contourPlotter(vel_mag_red,tri1,title = "Velocity magnitude reduced, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_reduced_velocity"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
-            contourPlotter(press_red,tri2,title = "Pressure reduced, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_reduced_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
-        
+            contourPlotter(ux,tri1,title = "$u_{x,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uxr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
+            contourPlotter(uy,tri1,title = "$u_{y,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uyr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")      
+            contourPlotter(vel_mag_red,tri1,title = "$|u_r|$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_abs_ur_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
+            contourPlotter(press_red,tri2,title = "$p_r$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_pr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
+         
         elif typ == 6 or typ == 7:
             if plot_original:
                 contourPlotter(vel_mag_orig,tri1,title = "Velocity magnitude original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_velocity_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
                 contourPlotter(press_orig,tri2,title = "Pressure original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
-            contourPlotter(ux,tri1,title = "$u_x$ reduced, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_reduced_x_velocity"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
-            contourPlotter(uy,tri1,title = "$u_y$ reduced, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_reduced_y_velocity"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
-            contourPlotter(vel_mag_red,tri1,title = "Velocity magnitude reduced, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_reduced_velocity"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
-            contourPlotter(press_red,tri2,title = "Pressure reduced, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_reduced_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
+            contourPlotter(ux,tri1,title = "$u_{x,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uxr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
+            contourPlotter(uy,tri1,title = "$u_{y,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uyr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")      
+            contourPlotter(vel_mag_red,tri1,title = "$|u_r|$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_abs_ur_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
+            contourPlotter(press_red,tri2,title = "$p_r$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_pr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
         plt.close('all')
 
 def get_archetype(N,typ,mu):
