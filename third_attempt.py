@@ -1,3 +1,4 @@
+from operator import sub
 from tqdm.contrib.concurrent import process_map
 from multiprocessing import Manager
 import sys
@@ -678,7 +679,7 @@ def omega(p,typ):
     else:
         print("Domain type invalid/not defined yet!")
 
-def sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set,q_list,mu,points,lin_set,non_homog,inner,typ):
+def sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set,q_list,mu,points,lin_set,non_homog,inner,typ,return_A = False):
     A = sp.lil_matrix((len(inner),len(inner)))
     A_rhs = sp.lil_matrix((len(inner),len(non_homog)))
     for Ax,Ay,Ax_rhs,Ay_rhs,qx,qy in zip(Ax_set,Ay_set,Ax_rhs_set,Ay_rhs_set,q_list[0],q_list[1]):
@@ -755,6 +756,8 @@ def sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set,q_
     #bygger blokkmatrisa og løser
     Block = sp.bmat([[A,None,Dx.T],[None,A,Dy.T],[Dx,Dy,None]]).tocsr()
     u_bar = solver(Block,rhs)
+    if return_A:
+        return u_bar,A
     return u_bar
 
 def reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_r,Dx_rhs_r,q_list,mu,points,non_homog,typ):
@@ -899,31 +902,177 @@ def multiiterator(mu):
     S_mat.append(sol)
     new_mu_list.append(mu)
 
+def multiiterator2(mu):
+    if typ == 0:
+        J1 = [1+mu[0],1+mu[1]]
+
+        Js = [J1]
+
+    elif typ == 1 or typ == 2:
+        J1 = [1+mu[0],1+mu[1]]
+        J2 = [1+mu[2],1+mu[1]]
+        J3 = [1+mu[2],1+mu[3]]
+        J4 = [1+mu[4],1+mu[1]]
+
+        Js = [J1,J2,J3,J4]
+
+    elif typ == 3:
+        J1 = [mu[0]+1,mu[1] +1]
+        J2 = [mu[2]+1,mu[3] +1]
+        J3 = [mu[2]+1,mu[1] +1]
+
+        Js = [J1,J2,J3]
+
+    elif typ == 5:
+        J1 = [mu[0]+1,2*mu[2] +1]
+        J2 = [1,2*mu[2] +1]
+        J3 = [mu[1]+1,2*mu[2] +1]
+        J4 = [mu[0]+1,1]
+        J5 = [mu[1]+1,1]
+        J6 = J1
+        J7 = J2
+        J8 = J3
+
+        Js = [J1,J2,J3,J4,J5,J6,J7,J8]
+
+    elif typ == 6 or typ == 7:
+        J1 = [1,mu[0] +1]
+        J2 = [1,2*mu[1]+1-mu[0]]
+
+        Js = [J1,J2]
+
+    q1,q2,q3,q4 = [],[],[],[]
+
+    for J in Js:        
+        q1.append(J[1]/J[0])
+        q2.append(J[0]/J[1])
+        q3.append(J[1])
+        q4.append(J[0])
+            
+    q_list = [q1,q2,q3,q4]
+
+    orig_sol = sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set,q_list,mu,points,lin_set,non_homog,inner,typ)
+
+    red_sol = reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_r,Dx_rhs_r,q_list,mu,points,non_homog,typ)
+
+    uxo = orig_sol[:len(inner)]
+    uyo = orig_sol[len(inner):2*len(inner)]
+    po = orig_sol[2*len(inner):]
+
+    midler = RB_mat.shape[1]
+    RB1 = RB_mat[:len(inner)]
+    RB2 = RB_mat[len(inner):2*len(inner)]
+    RB3 = RB_mat[2*len(inner):]
+
+    ux = RB1@red_sol[:midler]
+    uy = RB2@red_sol[midler:2*midler]
+    p = RB3@red_sol[2*midler:]
+
+    ux_L2_vec[-1]+= np.sqrt(((uxo -ux).T@L2A@(uxo -ux))/((uxo).T@L2A@(uxo)))
+    uy_L2_vec[-1]+= np.sqrt(((uyo -uy).T@L2A@(uyo -uy))/((uyo).T@L2A@(uyo)))
+    ux_H1_vec[-1]+= np.sqrt(((uxo -ux).T@H1A@(uxo -ux))/((uxo).T@H1A@(uxo)))
+    uy_H1_vec[-1]+= np.sqrt(((uyo -uy).T@H1A@(uyo -uy))/((uyo).T@H1A@(uyo)))
+    p_L2_vec[-1] += np.sqrt(((po -p).T@L2B@(po -p))/ ((po).T@L2B@(po)))
+
+def convergence(Sol_mat,mus):
+    u, s, vt = np.linalg.svd(np.transpose(Sol_mat))
+    basis = [10,20,30,40,50]
+    #basis = [1,2,3,4,5]
+
+    for bases in basis:
+        ux_L2_vec.append(0)
+        uy_L2_vec.append(0)
+        ux_H1_vec.append(0)
+        uy_H1_vec.append(0)        
+        p_L2_vec.append(0)
+        print("number of basis functions: ", bases)
+        global RB_mat
+        RB_mat = u[:,:bases]
+        RB1 = RB_mat[:len(inner)]
+        RB2 = RB_mat[len(inner):2*len(inner)]
+        RB3 = RB_mat[2*len(inner):]
+        global Ax_r1
+        global Ay_r1 
+        global Ax_r2
+        global Ay_r2 
+        global Dx_r
+        global Dy_r
+        global DxT_r
+        global DyT_r
+        global Ax_rhs_r
+        global Ay_rhs_r
+        global Dx_rhs_r
+        Ax_r1 = []
+        Ay_r1 = []
+        Ax_r2 = []
+        Ay_r2 = []
+        Dx_r = []
+        Dy_r = []
+        DxT_r = []
+        DyT_r = []
+        Ax_rhs_r = []
+        Ay_rhs_r = []
+        Dx_rhs_r = []
+        for Ax,Ay,Dx,Dy,Ax_rhs,Ay_rhs,Dx_rhs in zip(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set):
+            Ax_r1.append(RB1.T@Ax@RB1)
+            Ax_r2.append(RB2.T@Ax@RB2)
+            Ay_r1.append(RB1.T@Ay@RB1)
+            Ay_r2.append(RB2.T@Ay@RB2)
+            Dx_r.append(RB3.T@Dx@RB1)
+            Dy_r.append(RB3.T@Dy@RB2)
+            DxT_r.append(RB1.T@Dx.T@RB3)
+            DyT_r.append(RB2.T@Dy.T@RB3)
+            Ax_rhs_r.append(RB1.T@Ax_rhs)
+            Ay_rhs_r.append(RB1.T@Ay_rhs)
+            Dx_rhs_r.append(RB3.T@Dx_rhs)
+        
+        r = process_map(multiiterator2, mus, max_workers=32, chunksize=3)
+
+        ux_L2_vec[-1] /= len(mus)
+        uy_L2_vec[-1] /= len(mus)
+        ux_H1_vec[-1] /= len(mus)
+        uy_H1_vec[-1] /= len(mus)
+        p_L2_vec[-1]  /= len(mus)
+
+    plt.figure()
+    plt.title("Convergence, archetype "+str(typ))
+    plt.semilogy(basis, ux_L2_vec,label = "$||u_x-u_{x,r}||_{L2}/||u_x||_{L2}$",marker = "o",linestyle='dashed')
+    plt.semilogy(basis, uy_L2_vec,label = "$||u_y-u_{y,r}||_{L2}/||u_y||_{L2}$",marker = "o",linestyle='dashed')
+    plt.semilogy(basis, ux_H1_vec,label = "$|u_x-u_{x,r}|_{H1}/|u_x|_{H1}$",marker = "o",linestyle='dashed')
+    plt.semilogy(basis, uy_H1_vec,label = "$|u_y-u_{y,r}|_{H1}/|u_y|_{H1}$",marker = "o",linestyle='dashed')
+    plt.semilogy(basis, p_L2_vec,label = "$||p-p_r||_{L2}/||p||_{L2}$",marker = "o",linestyle='dashed')
+    plt.xlabel("Number of singular vectors")
+    plt.ylabel("Relative norm")
+    plt.legend()
+    plt.savefig("Convergence_plot_"+str(typ), dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
+    plt.close("all")
+
 if __name__ == "__main__":
-    offline =False
+    offline =False 
     plot_eigenvalues = False
-    plot_original = False
+    plot_original = True
+    test_convergence = False
     
     N = 5
     #type domene: 0, 1, 2, 3, 4, 5, 6, 7
     typ = 7
     #archetype 0 #length,width
-    #mu = [.5,.1,3]
+    #mu = [-.5,.5,1]
     #subdomains = 1
     #archetype 1,2
     #mu = [-.5,0,0,-.5,1,7] #length pre bifurcation, inlet and outlet width,bifurcation outlet width,length scale bifurcation,length scale post bifurcation,amplitude
     #subdomains = 4
     #archetype 3
-    #mu = [-.5,1,-.5,0,1] #length pre corner, width inlet, width outlet, lemgth post corner, amplitude
+    #mu = [-.5,1,-.5,-.5,1] #length pre corner, width inlet, width outlet, lemgth post corner, amplitude
     #subdomains = 3
     #archetype 5
     #mu = [0,0,1,1] #length pre-hole, length post_hole, width, amplitude
     #subdomains = 8
     #archetype 6 / 7
-    mu = [.2,-.3,5] #width outlet, width inlet, amplitude / width inlet, width outlet, amplitude
+    mu = [.5,.5,5] #width outlet, width inlet, amplitude / width inlet, width outlet, amplitude
     subdomains = 2
     points,elements,lin_set,non_homog,homog,neu,inner = createDomain(N,typ)
-    
+    print("Archetype", typ)
     #my-verdier må legges til for hver archetype
     if offline: 
         visc = 150
@@ -947,11 +1096,11 @@ if __name__ == "__main__":
                 mu_list.append(my)
 
         elif typ == 3:
-            mu1 = [-.5,0,.5] #length scale pre corner
-            mu2 = [-.5,0,.5,1] #inlet width
-            mu3 = [-.5,0,.5,1] #outlet width
-            mu4 = [-.5,0,.5] #length scale post corner 
-            mu5 = [1,5,10] #amplitude of inlet velocity profile
+            mu1 = [-.5,0,1] #length scale pre corner
+            mu2 = [-.5,0,1] #inlet width
+            mu3 = [-.5,0,1] #outlet width
+            mu4 = [-.5,0,1] #length scale post corner 
+            mu5 = [1,3,5] #amplitude of inlet velocity profile
             mu_list = []
             for my in product(mu1,mu2,mu3,mu4,mu5):
                 mu_list.append(my)
@@ -967,7 +1116,7 @@ if __name__ == "__main__":
         
         elif typ == 6:
             mu1 = [-.5,-.3,-.1,.1,.3,.5] #width of outlet, out = 0.2*(1+mu1)
-            mu2 = [-.2,0,0.2,0.4,0.6,] #width of inlet, in = 0.4*(1+mu2)
+            mu2 = [-.2,0,0.2,0.4,0.6,.8] #width of inlet, in = 0.4*(1+mu2)
             mu3 = [1,4,7,10] #amplitude of inlet velocity profile
             mu_list = []
             for my in product(mu1,mu2,mu3):
@@ -975,7 +1124,7 @@ if __name__ == "__main__":
         
         elif typ == 7:
             mu1 = [-.5,-.3,-.1,.1,.3,.5] #width of inlet, in = 0.2*(1+mu1)
-            mu2 = [-.2,0,0.2,0.4,0.6,] #width of outlet, out = 0.4*(1+mu2)
+            mu2 = [-.2,0,0.2,0.4,0.6,.8] #width of outlet, out = 0.4*(1+mu2)
             mu3 = [1,4,7,10] #amplitude of inlet velocity profile
             mu_list = []
             for my in product(mu1,mu2,mu3):
@@ -995,6 +1144,16 @@ if __name__ == "__main__":
         a_bilin_y = lambda x,y,c,i,j: (1/visc)*phi_dy(x,y,c,j)*phi_dy(x,y,c,i)
         b_bilin_x = lambda x,y,c1,c2,i,j: -phi_dx(x,y,c2,j)*zeta(x,y,c1,i)
         b_bilin_y = lambda x,y,c1,c2,i,j: -phi_dy(x,y,c2,j)*zeta(x,y,c1,i)
+        L2vel = lambda x,y,c,i,j: phi(x,y,c,i)*phi(x,y,c,j)
+        H1semi = lambda x,y,c,i,j: (phi_dx(x,y,c,j)*phi_dx(x,y,c,i) + phi_dy(x,y,c,j)*phi_dy(x,y,c,i))
+        L2pres = lambda x,y,c,i,j: zeta(x,y,c,i)*zeta(x,y,c,j)
+
+        L2At = createA(L2vel,points,elements)
+        H1At = createA(H1semi,points,elements)
+        L2Bt = createA(L2pres,points,elements)
+        L2A = matrixShaver(L2At,inner,inner)
+        H1A = matrixShaver(H1At,inner,inner)
+        L2B = matrixShaver(L2Bt,lin_set,lin_set)
 
         manager = Manager()
         S_mat = manager.list()
@@ -1013,7 +1172,7 @@ if __name__ == "__main__":
             Ax = createSubA(a_bilin_x,points,elements,domain = i)
             Ay = createSubA(a_bilin_y,points,elements,domain = i)
             Dx = createSubD(b_bilin_x,points,elements,domain = i)
-            Dy = createSubD(b_bilin_y,points,elements,domain = i)
+            Dy = createSubD(b_bilin_y,points,elements,domain = i)  
 
             Axi = matrixShaver(Ax,inner,inner)
             Ayi = matrixShaver(Ay,inner,inner)
@@ -1035,6 +1194,14 @@ if __name__ == "__main__":
         S_mat = np.asarray(S_mat)
         print(np.linalg.norm(S_mat))
         new_mu_list = np.asarray(new_mu_list)
+        if test_convergence:
+            manager = Manager()
+            ux_L2_vec = manager.list()
+            uy_L2_vec = manager.list()
+            ux_H1_vec = manager.list()
+            uy_H1_vec = manager.list()
+            p_L2_vec = manager.list()
+            convergence(S_mat,mu_list)
         u, s, vt = np.linalg.svd(np.transpose(S_mat))
         eigval_sum = sum(s**2)
         decr_eigvals = s**2
@@ -1185,15 +1352,32 @@ if __name__ == "__main__":
             q4.append(J[0])
                 
         q_list = [q1,q2,q3,q4]
-        
-        if plot_original:
-            start_time = time.time()
-            orig_sol = sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set,q_list,mu,points,lin_set,non_homog,inner,typ)
-            print("FOM solver time:", time.time()- start_time)
 
         start_time = time.time()
         red_sol = reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_r,Dx_rhs_r,q_list,mu,points,non_homog,typ)
         print("ROM solver time:", time.time()- start_time)
+
+        if plot_original:
+            start_time = time.time()
+            orig_sol, A = sparseSolver(Ax_set,Ay_set,Dx_set,Dy_set,Ax_rhs_set,Ay_rhs_set,Dx_rhs_set,q_list,mu,points,lin_set,non_homog,inner,typ,return_A = True)
+            print("FOM solver time:", time.time()- start_time)
+
+            uxinner = orig_sol[:len(inner)]
+            uyinner = orig_sol[len(inner):2*len(inner)]
+            pinner = orig_sol[2*len(inner):]
+
+            norm_vel_o = np.sqrt(uxinner**2 + uyinner**2)
+
+            RB1 = RB_mat[:len(inner)]
+            RB2 = RB_mat[len(inner):2*len(inner)]
+            RB3 = RB_mat[2*len(inner):]
+            temp = RB_mat.shape[1]
+
+            uxr = RB1@red_sol[:temp]
+            uyr = RB2@red_sol[temp:2*temp]
+            pr = RB3@red_sol[2*temp:]
+
+            norm_vel_r = np.sqrt(uxr**2 + uyr**2)
 
         #rescaling and lifting to original domain
         if typ == 0:
@@ -1262,20 +1446,32 @@ if __name__ == "__main__":
                 lift = -(100*mu[2]/((1 + mu[0])**2))*y_n*(y_n-0.2*(1+mu[0]))
         
         ux,uy,p = solHelper2(red_sol,RB_mat,points,non_homog,inner,lift)
+        vel_mag_red = vel_mag_red = np.sqrt(ux**2 + uy**2)
+        press_red = p
 
         if plot_original:
-            ux_o,uy_o,p_o = solHelper(orig_sol,lift,inner,points,non_homog)
+            print("dofs reduced system:")
+            print(len(red_sol))
+            print("dofs original system:")
+            print(len(orig_sol))
+            print("velocity dofs, original,reduced:")
+            print(len(uxinner))
+            print(len(red_sol[:temp]))
+            print("pressure dofs original,reduced")
+            print(len(pinner))
+            print(len(red_sol[2*temp:]))
+            print("number of basis vectors")
+            print(RB_mat.shape[1])
 
-            print("----------------DISCRETE L2 NORMS--------------------")
-            print(np.linalg.norm(ux-ux_o)/np.linalg.norm(ux_o))
-            print(np.linalg.norm(uy-uy_o)/np.linalg.norm(uy_o))
-            print(np.linalg.norm(p-p_o)/np.linalg.norm(p_o))
-            
+            ux_o,uy_o,p_o = solHelper(orig_sol,lift,inner,points,non_homog)
             vel_mag_orig = vel_mag_orig = np.sqrt(ux_o**2 + uy_o**2)
             press_orig = p_o
 
-        vel_mag_red = vel_mag_red = np.sqrt(ux**2 + uy**2)
-        press_red = p
+            print("----------------NORMS--------------------")
+            print("Absolute velocity H1")
+            print(np.sqrt(((norm_vel_o-norm_vel_r).T@A@(norm_vel_o-norm_vel_r))/norm_vel_o.T@A@norm_vel_o))
+            print("Pressure L2")
+            print(np.sqrt((pinner-pr).T@(pinner-pr)/(pinner.T@pinner)))
 
         tri1 = plotHelp(points,N,1,coord_mask=True)
         tri2 = plotHelp(points[lin_set],N,1,coord_mask = True)
@@ -1527,23 +1723,3 @@ def get_archetype(N,typ,mu):
         uy = -uy
     return ux,uy,p,points,points[lin_set], neu
 
-''' 
-uxo = ux_o[lin_set]
-uxo = uxo.reshape((2**(N-1)+1,5*(2**(N-1))+1))
-uyo = uy_o[lin_set]
-uyo = uyo.reshape((2**(N-1)+1,5*(2**(N-1))+1))
-po = points[lin_set]
-px = po[:,0]
-py = po[:,1]
-px = px.reshape((2**(N-1)+1,5*(2**(N-1))+1))
-py = py.reshape((2**(N-1)+1,5*(2**(N-1))+1))
-uxo = uxo[:,:12]
-uyo = uyo[:,:12]
-px = px[:,:12]
-py = py[:,:12]
-uxo = uxo.flatten()
-uyo = uyo.flatten()
-px = [px.flatten()]
-py = [py.flatten()]
-po = np.concatenate((px,py),axis = 0)
-'''

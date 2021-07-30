@@ -10,6 +10,8 @@ if __name__ == "__main__":
     #STRAIGHT PIPE
     #Type 0: [length 1+mu, width 0.2(1+mu)]
     #OPEN BIFURCATION PIPE
+    #Type 1: [length pre bifur 0.4(1+mu),inlet and outlet width 0.2(1+mu), bifurcation outlet width 0.2(1+mu),length bifur 0.2(1+mu), length post bifur 0.4(1+mu),down cavity? 0 if no, 1 if yes]
+    #OPEN BIFURCATION PIPE
     #Type 2: [length pre bifur 0.4(1+mu),inlet and outlet_1 width 0.2(1+mu), bifurcation outlet_2 width 0.2(1+mu),length bifur 0.4(1+mu), length post bifur 0.4(1+mu), connect to outlet 1 or outlet 2? 0 if 1, 1 if 2]
     #LEFT CORNER PIPE
     #Type 3: [length scale pre corner 0.4(1+mu),inlet width 0.2(1+mu),outlet width 0.2(1+mu),length scale post corner 0.4(1+mu)]
@@ -29,21 +31,30 @@ if __name__ == "__main__":
     #mus = [[0,0],[0,0],[0,0],[0,0],[0,0]]
     #types = [0,3,3,0,4,4,0,3,3,0,4,4,0]
     #mus = [[0,.5],[0,.5,.5,-.5],[-.5,.5,.5,0],[0,.5],[0,.5,.5,-.5],[-.5,.5,.5,0],[0,.5],[0,.5,.5,-.5],[-.5,.5,.5,0],[0,.5],[0,.5,.5,-.5],[-.5,.5,.5,0],[0,.5]]
-    types = [2,2,2,2,0]
-    mus = [[0.25,0,0,0.25,0,1],[0.5,0,0,0.5,0,1],[0.75,0,0,0.75,0,1],[1,0,0,1,0,1],[0,0]]
+    #types = [2,2,2,2,0]
+    #mus = [[0.25,0,0,0.25,0,1],[0.5,0,0,0.5,0,1],[0.75,0,0,0.75,0,1],[1,0,0,1,0,1],[0,0]]
+    types = [0,1,2,3,4,5,7,6]
+    mus = [[0,0],[0,0,0,0,0,0],[0,0,0,0,0,1],[0,0,0,0],[0,0,0,0],[0,0,0],[0,0],[0,0]]
     
-    if types[0] == 0:
-        print("INLET \"VOLUME\" FLOW:", (2/3)*vel*0.2*(1+mus[0][1]), "m**2/s")
-    elif types[0] == 2:
-        print("INLET \"VOLUME\" FLOW:", (2/3)*vel*0.2*(1+mus[0][1]), "m**2/s")
+    types = [1,1,1,1,3,3,1,1,1,1]
+    mus = [[-.5,0,1,0,-.5,0],[-.5,0,1,0,-.5,1],[-.5,0,1,0,-.5,0],[-.5,0,1,0,-.5,1],[-.5,0,.5,0],[0,.5,1,1],[-.5,1,1,0,-.5,0],[-.5,1,1,0.25,-.5,1],[-.5,1,1,0.5,-.5,0],[-.5,1,1,0.75,-.5,1]]
+
+
+    if types[0] == 0 or types[0] == 1 or types[0] ==2:
+        inflow = (2/3)*vel*0.2*(1+mus[0][1])
+        print("INLET \"VOLUME\" FLOW:", inflow, "m**2/s")
     elif types[0] == 3 or types[0] == 4:
-        print("INLET \"VOLUME\" FLOW:", (2/3)*vel*0.2*(1+mus[0][1]), "m**2/s")
+        inflow = (2/3)*vel*0.2*(1+mus[0][1])
+        print("INLET \"VOLUME\" FLOW:", inflow, "m**2/s")
     elif types[0] == 5:
-        print("INLET \"VOLUME\" FLOW:", (2/3)*vel*0.2*(1+mus[0][-1]), "m**2/s")
+        inflow = (2/3)*vel*0.2*(1+mus[0][-1])
+        print("INLET \"VOLUME\" FLOW:", inflow, "m**2/s")
     elif types[0] == 6:
-        print("INLET \"VOLUME\" FLOW:", (2/3)*vel*0.4*(1+mus[0][1]), "m**2/s")
+        inflow = (2/3)*vel*0.4*(1+mus[0][1])
+        print("INLET \"VOLUME\" FLOW:", inflow, "m**2/s")
     elif types[0] == 7:
-        print("INLET \"VOLUME\" FLOW:", (2/3)*vel*0.2*(1+mus[0][0]), "m**2/s")
+        inflow = (2/3)*vel*0.2*(1+mus[0][0])
+        print("INLET \"VOLUME\" FLOW:", inflow, "m**2/s")
 
     if len(types) != len(mus):
         print("Different sizes of inndata lists! exiting program")
@@ -65,6 +76,9 @@ if __name__ == "__main__":
         print("----",i,"----")
 
         rotate = rotate%4
+        if typ == 1:
+            down = mu[-1]
+            mu[-1] = vel
         if typ == 2:
             connect = mu[-1]
             mu[-1] = vel
@@ -84,7 +98,27 @@ if __name__ == "__main__":
                 print("OUTLET \"VOLUME\" FLOW:", (2/3)*vel*0.2*(1+mu[1]), "m**2/s")
                 print("TOTAL LOST \"VOLUME\" FLOW:", lost_volume, "m**2/s")
                 print("TOTAL \"VOLUME\" FLOW:", lost_volume+(2/3)*vel*0.2*(1+mu[1]), "m**2/s")
-        
+                print("RELATIVE \"VOLUME\" FLOW LOST/GAINED DUE TO INACURACIES:",(lost_volume+(2/3)*vel*0.2*(1+mu[1])-inflow)/inflow)
+
+        elif typ == 1:
+            if down:
+                lin_points_i[:,1] = -lin_points_i[:,1] + 0.2*(1+mu[1])
+                points_i[:,1] = -points_i[:,1] + 0.2*(1+mu[1])
+                uy_i = -uy_i
+            outlet = np.concatenate(([0],ux_i[out],[0]))
+            outpts = points_i[out,1]
+            dx = abs(outpts[1]-outpts[0])
+            outpts = outpts - outpts[0] + dx
+            outletpts = np.concatenate(([outpts[0] - dx] ,outpts,[outpts[-1] + dx]))
+            poly = np.polyfit(outletpts,outlet,deg=2)
+            #vel = (1/2)*poly[0]*(0.2*(1+mu[2]))**2 + (3/4)*poly[1]*0.2*(1+mu[2]) #+(3/2)*poly[2]
+            vel = abs(-(poly[1]**2)/(4*poly[0])+poly[2])
+            if i == len(types)-1:
+                print("OUTLET \"VOLUME\" FLOW:", (2/3)*vel*0.2*(1+mu[1]), "m**2/s")
+                print("TOTAL LOST \"VOLUME\" FLOW:", lost_volume, "m**2/s")
+                print("TOTAL \"VOLUME\" FLOW:", lost_volume+(2/3)*vel*0.2*(1+mu[1]), "m**2/s")
+                print("RELATIVE \"VOLUME\" FLOW LOST/GAINED DUE TO INACURACIES:",(lost_volume+(2/3)*vel*0.2*(1+mu[1])-inflow)/inflow)
+
         elif typ == 2:
             velocity = [0,0]
             out1 = out[:int(len(out)/2)]
@@ -123,10 +157,12 @@ if __name__ == "__main__":
                     print("FINAL OUTLET \"VOLUME\" FLOW:", (2/3)*velocity[0]*0.2*(1+mu[1]), "m**2/s")
                     print("TOTAL LOST \"VOLUME\" FLOW:", lost_volume, "m**2/s")
                     print("TOTAL \"VOLUME\" FLOW:", lost_volume+(2/3)*velocity[0]*0.2*(1+mu[1]), "m**2/s")
+                    print("RELATIVE \"VOLUME\" FLOW LOST/GAINED DUE TO INACURACIES:",(lost_volume+(2/3)*vel*0.2*(1+mu[1])-inflow)/inflow)
                 else:
                     print("FINAL OUTLET \"VOLUME\" FLOW:", (2/3)*velocity[1]*0.2*(1+mu[2]), "m**2/s")
                     print("TOTAL LOST \"VOLUME\" FLOW:", lost_volume, "m**2/s")
                     print("TOTAL \"VOLUME\" FLOW:", lost_volume+(2/3)*velocity[1]*0.2*(1+mu[2]), "m**2/s")
+                    print("RELATIVE \"VOLUME\" FLOW LOST/GAINED DUE TO INACURACIES:",(lost_volume+(2/3)*vel*0.2*(1+mu[2])-inflow)/inflow)
 
         elif typ == 3 or typ == 4:
             outlet = np.concatenate(([0],uy_i[out],[0]))
@@ -141,7 +177,8 @@ if __name__ == "__main__":
                 print("FINAL OUTLET \"VOLUME\" FLOW:", (2/3)*vel*0.2*(1+mu[2]), "m**2/s")
                 print("TOTAL LOST \"VOLUME\" FLOW:", lost_volume, "m**2/s")
                 print("TOTAL \"VOLUME\" FLOW:", lost_volume+(2/3)*(2/3)*vel*0.2*(1+mu[2]), "m**2/s")
-        
+                print("RELATIVE \"VOLUME\" FLOW LOST/GAINED DUE TO INACURACIES:",(lost_volume+(2/3)*vel*0.2*(1+mu[2])-inflow)/inflow)
+
         elif typ == 5:
             outlet = np.concatenate(([0],ux_i[out],[0]))
             outpts = points_i[out,1]
@@ -154,6 +191,7 @@ if __name__ == "__main__":
                 print("OUTLET \"VOLUME\" FLOW:", (2/3)*vel*0.2*(1+mu[-2]), "m**2/s")
                 print("TOTAL LOST \"VOLUME\" FLOW:", lost_volume, "m**2/s")
                 print("TOTAL \"VOLUME\" FLOW:", lost_volume+(2/3)*vel*0.2*(1+mu[-2]), "m**2/s")
+                print("RELATIVE \"VOLUME\" FLOW LOST/GAINED DUE TO INACURACIES:",(lost_volume+(2/3)*vel*0.2*(1+mu[-2])-inflow)/inflow)
         
         elif typ == 6:
             outlet = np.concatenate(([0],ux_i[out],[0]))
@@ -167,6 +205,7 @@ if __name__ == "__main__":
                 print("OUTLET \"VOLUME\" FLOW:", (2/3)*vel*0.2*(1+mu[0]), "m**2/s")
                 print("TOTAL LOST \"VOLUME\" FLOW:", lost_volume, "m**2/s")
                 print("TOTAL \"VOLUME\" FLOW:", lost_volume+(2/3)*vel*0.2*(1+mu[0]), "m**2/s")
+                print("RELATIVE \"VOLUME\" FLOW LOST/GAINED DUE TO INACURACIES:",(lost_volume+(2/3)*vel*0.2*(1+mu[0])-inflow)/inflow)
         
         elif typ == 7:
             outlet = np.concatenate(([0],ux_i[out],[0]))
@@ -181,7 +220,9 @@ if __name__ == "__main__":
                 print("OUTLET \"VOLUME\" FLOW:", (2/3)*vel*0.4*(1+mu[-2]), "m**2/s")
                 print("TOTAL LOST \"VOLUME\" FLOW:", lost_volume, "m**2/s")
                 print("TOTAL \"VOLUME\" FLOW:", lost_volume+(2/3)*vel*0.4*(1+mu[-2]), "m**2/s")
+                print("RELATIVE \"VOLUME\" FLOW LOST/GAINED DUE TO INACURACIES:",(lost_volume+(2/3)*vel*0.2*(1+mu[-2])-inflow)/inflow)
         
+        #rotering
         if rotate == 0:
             xi_new = points_i[:,0].max()
             yi_new = points_i[:,1].max()
