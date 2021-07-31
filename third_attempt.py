@@ -1047,21 +1047,21 @@ def convergence(Sol_mat,mus):
     plt.savefig("Convergence_plot_"+str(typ), dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
     plt.close("all")
 
-if __name__ != "__main__":
-    offline =False 
+if __name__ == "__main__":
+    offline = False
     plot_eigenvalues = False
-    plot_original = True
+    plot_original = False
     test_convergence = False
     
     N = 5
     #type domene: 0, 1, 2, 3, 4, 5, 6, 7
-    typ = 7
+    typ = 2
     #archetype 0 #length,width
     #mu = [-.5,.5,1]
     #subdomains = 1
     #archetype 1,2
-    #mu = [-.5,0,0,-.5,1,7] #length pre bifurcation, inlet and outlet width,bifurcation outlet width,length scale bifurcation,length scale post bifurcation,amplitude
-    #subdomains = 4
+    mu = [-.5,0,0,-.5,1,7] #length pre bifurcation, inlet and outlet width,bifurcation outlet width,length scale bifurcation,length scale post bifurcation,amplitude
+    subdomains = 4
     #archetype 3
     #mu = [-.5,1,-.5,-.5,1] #length pre corner, width inlet, width outlet, lemgth post corner, amplitude
     #subdomains = 3
@@ -1069,8 +1069,8 @@ if __name__ != "__main__":
     #mu = [0,0,1,1] #length pre-hole, length post_hole, width, amplitude
     #subdomains = 8
     #archetype 6 / 7
-    mu = [.5,.5,5] #width outlet, width inlet, amplitude / width inlet, width outlet, amplitude
-    subdomains = 2
+    #mu = [.5,.5,5] #width outlet, width inlet, amplitude / width inlet, width outlet, amplitude
+    #subdomains = 2
     points,elements,lin_set,non_homog,homog,neu,inner = createDomain(N,typ)
     print("Archetype", typ)
     #my-verdier må legges til for hver archetype
@@ -1721,65 +1721,120 @@ def get_archetype(N,typ,mu):
     ux,uy,p = solHelper2(red_sol,RB_mat,points,non_homog,inner,lift)
     if typ == 4:
         uy = -uy
-    return ux,uy,p,points,points[lin_set], neu
+    return ux,uy,p,points,points[lin_set], neu, non_homog
 
-N = 2
+def connect_archetype(N,typ1,typ2):
+    points1,elements1,lin_set1,non_homog1,homog1,neu1,inner1 = createDomain(N,typ1)
+    points2,elements2,lin_set2,non_homog2,homog2,neu2,inner2 = createDomain(N,typ2)
 
-typ1 = 0
-typ2 = 1
+    if typ1 == 2:
+        neuvert = neu1[int(len(neu1)/2):]
+        neu1 = neu1[:int(len(neu1)/2)]
+    connect1 = np.concatenate(([neu1[0]-(5*2**N+1)],neu1,[neu1[-1]+5*2**N+1]))
+    if typ2 == 3:
+        connect2 = np.concatenate(([non_homog2[0]-(3*2**N+1)],non_homog2,[non_homog2[-1]+(3*2**N+1)]))
+    else:
+        connect2 = np.concatenate(([non_homog2[0]-(5*2**N+1)],non_homog2,[non_homog2[-1]+(5*2**N+1)]))
 
-points1,elements1,lin_set1,non_homog1,homog1,neu1,inner1 = createDomain(N,typ1)
-points2,elements2,lin_set2,non_homog2,homog2,neu2,inner2 = createDomain(N,typ2)
-connect1 = np.concatenate(([neu1[0]-(5*2**N+1)],neu1,[neu1[-1]+5*2**N+1]))
-connect2 = np.concatenate(([non_homog2[0]-(5*2**N+1)],non_homog2,[non_homog2[-1]+(5*2**N+1)]))
+    new_el = elements1
 
-testing = np.zeros((5,len(points1)))
-testing[0,lin_set1] = 1
-testing[1,non_homog1] = 1
-testing[2,homog1] = 1
-testing[3,neu1] = 1
-testing[4,inner1] = 1
-'''
-plt.figure()
-plotElements(points1,elements1)
-plt.title('Domain w/bilinear and biquadratic elements')
-for i,p in enumerate(points1):
-    plt.annotate(str(i),p)
-plt.axis('scaled')
-plt.savefig("aaa_type"+str(typ1), dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
+    new_lin1 = np.zeros(len(points1))
+    new_lin1[lin_set1] = 1
+    new_non1 = np.zeros(len(points1))
+    new_non1[non_homog1] = 1
+    new_hom1 = np.zeros(len(points1))
+    new_hom1[homog1] = 1
+    new_neu1 = np.zeros(len(points1))
+    if typ1 == 2:
+        new_neu1[neuvert] = 1
+    new_inn1 = np.zeros(len(points1))
+    new_inn1[inner1] = 1
 
-plt.figure()
-plotElements(points2,elements2)
-plt.title('Domain w/bilinear and biquadratic elements')
-for i,p in enumerate(points2):
-    plt.annotate(str(i),p)
-plt.axis('scaled')
-plt.savefig("aaa_type"+str(typ2), dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
+    new_lin2 = np.zeros(len(points2))
+    new_lin2[lin_set2] = 1
+    new_non2 = np.zeros(len(points2))
+    new_hom2 = np.zeros(len(points2))
+    new_hom2[homog2] = 1
+    new_neu2 = np.zeros(len(points2))
+    new_neu2[neu2] = 1
+    new_inn2 = np.zeros(len(points2))
+    new_inn2[inner2] = 1
 
-plt.close('all')
-'''
+    points2[:,0] += points1[:,0].max()
+    new_pts = np.concatenate((points1,points2[~np.isin(range(len(points2)),connect2)]))
+    new_lin = np.where(np.concatenate((new_lin1,new_lin2[~np.isin(range(len(points2)),connect2)])) == 1)[0]
+    new_non = np.where(np.concatenate((new_non1,new_non2[~np.isin(range(len(points2)),connect2)])) == 1)[0]
+    new_hom = np.where(np.concatenate((new_hom1,new_hom2[~np.isin(range(len(points2)),connect2)])) == 1)[0]
+    new_neu = np.where(np.concatenate((new_neu1,new_neu2[~np.isin(range(len(points2)),connect2)])) == 1)[0]
+    new_inn = np.where(np.concatenate((new_inn1,new_inn2[~np.isin(range(len(points2)),connect2)])) == 1)[0]
 
-for el in elements2:
-    el[0] += len(points1)
-    el[1] += len(points1)
+    e = 1E-5
 
-connect_temp = connect2 +len(points1)
-print(connect_temp)
-print(len(elements1))
-print(elements2[0][0])
+    print("Rearranging elements...")
 
-new_lin_elements = np.zeros((len(elements1)+len(elements2),4))
-new_sq_elements = np.zeros((len(elements1)+len(elements2),9))
+    for el in elements2:
+        for j in range(len(el[0])):
+            [x,y] = points2[el[0][j]]
+            xcond = np.logical_and(new_pts[:,0] > x -e,new_pts[:,0] < x+e)
+            ycond = np.logical_and(new_pts[:,1] > y -e,new_pts[:,1] < y+e)
+            el[0][j] = np.where(np.logical_and(xcond,ycond))[0][0]
+        for j in range(len(el[1])):
+            [x,y] = points2[el[1][j]]
+            xcond = np.logical_and(new_pts[:,0] > x -e,new_pts[:,0] < x+e)
+            ycond = np.logical_and(new_pts[:,1] > y -e,new_pts[:,1] < y+e)
+            el[1][j] = np.where(np.logical_and(xcond,ycond))[0][0]
+        new_el.append([el[0],el[1]])
 
-i = 0
-for el in elements1:
-    new_lin_elements[i] = el[0]
-    new_sq_elements[i] = el[1]
-    i += 1
-for el in elements2:
-    for el_lin in el[0]:
-        
-    for el_sq in el[1]:
-    new_lin_elements[i] = el[0]
-    new_sq_elements[i] = el[1]
-    i += 1
+    return new_pts,new_el, new_lin,new_non,new_hom,new_neu,new_inn
+
+def testSolver(N,vel,typ1,typ2,plot = True):
+    visc = 150
+    points,elements,lin_set,non_homog,homog,neu,inner = connect_archetype(N,typ1,typ2)
+    print("Domain created...")
+
+    phi_dx = lambda x,y,c,i: c[i][1] + c[i][3]*y + 2*c[i][4]*x + 2*c[i][6]*x*y + c[i][7]*(y**2) + 2*c[i][8]*x*(y**2)
+    phi_dy = lambda x,y,c,i: c[i][2] + c[i][3]*x + 2*c[i][5]*y + c[i][6]*(x**2) + 2*c[i][7]*x*y+ 2*c[i][8]*(x**2)*y
+
+    zeta = lambda x,y,c,i: c[i][0] + c[i][1]*x + c[i][2]*y +c[i][3]*x*y
+
+    a_bilin = lambda x,y,c,i,j: (1/visc)*(phi_dx(x,y,c,j)*phi_dx(x,y,c,i) + phi_dy(x,y,c,j)*phi_dy(x,y,c,i))
+    b_bilin_x = lambda x,y,c1,c2,i,j: -phi_dx(x,y,c2,j)*zeta(x,y,c1,i)
+    b_bilin_y = lambda x,y,c1,c2,i,j: -phi_dy(x,y,c2,j)*zeta(x,y,c1,i)
+
+    A = createA(a_bilin,points,elements)
+    Dx = createD(b_bilin_x,points,elements)
+    Dy = createD(b_bilin_y,points,elements)
+
+    Ai = matrixShaver(A,inner,inner)
+    Dxi = matrixShaver(Dx,lin_set,inner)
+    Dyi = matrixShaver(Dy,lin_set,inner)
+    D_rhs = matrixShaver(Dx,lin_set,non_homog)
+    A_rhs = matrixShaver(A,inner,non_homog)
+
+    y_n = points[non_homog,1]
+    rg = 100*vel*(0.2-y_n)*y_n
+
+    #lager høyresiden
+    fx = -A_rhs@rg
+    fy = np.zeros_like(fx)
+    fp = -D_rhs@rg
+    rhs = np.concatenate((fx,fy,fp))
+
+    #bygger blokkmatrisa og løser
+    Block = sp.bmat([[Ai,None,Dxi.T],[None,Ai,Dyi.T],[Dxi,Dyi,None]]).tocsr()
+    u_bar = solver(Block,rhs)
+
+    ux,uy,p = solHelper(u_bar,rg,inner,points,non_homog)
+    print(len(ux),len(uy),len(p))
+    tri1 = plotHelp(points,N,1,coord_mask=False)
+    tri2 = plotHelp(points[lin_set],N,1,coord_mask = False)
+
+    if plot:
+        contourPlotter(ux,tri1,title = "$u_{x}$",fname = "full_"+str(typ1)+str(typ2)+"_ux.png")
+        contourPlotter(uy,tri1,title = "$u_{y}$",fname = "full_"+str(typ1)+str(typ2)+"_uy.png")      
+        contourPlotter(np.sqrt(ux**2 +uy**2),tri1,title = "$|u|$",fname = "full_"+str(typ1)+str(typ2)+"_abs_u.png")
+        contourPlotter(p,tri2,title = "$p$",fname = "full_"+str(typ1)+str(typ2)+"_p.png")
+        print("Finished original plots...")
+        plt.close('all')
+
+    return ux,uy,p,points,lin_set,A

@@ -6,7 +6,11 @@ import third_attempt as arch
 
 if __name__ == "__main__":
     N = 5
-    vel = 2 #inlet max velocity
+    vel = 1 #inlet max velocity
+    
+    #SETT DENNE TIL TRUE OM MAN VIL SAMMENLIGNE KOMPONENTBASERT OG FULL MODELL
+    compare_full = True
+    plot_system = True
     #STRAIGHT PIPE
     #Type 0: [length 1+mu, width 0.2(1+mu)]
     #OPEN BIFURCATION PIPE
@@ -33,12 +37,13 @@ if __name__ == "__main__":
     #mus = [[0,.5],[0,.5,.5,-.5],[-.5,.5,.5,0],[0,.5],[0,.5,.5,-.5],[-.5,.5,.5,0],[0,.5],[0,.5,.5,-.5],[-.5,.5,.5,0],[0,.5],[0,.5,.5,-.5],[-.5,.5,.5,0],[0,.5]]
     #types = [2,2,2,2,0]
     #mus = [[0.25,0,0,0.25,0,1],[0.5,0,0,0.5,0,1],[0.75,0,0,0.75,0,1],[1,0,0,1,0,1],[0,0]]
-    types = [0,1,2,3,4,5,7,6]
-    mus = [[0,0],[0,0,0,0,0,0],[0,0,0,0,0,1],[0,0,0,0],[0,0,0,0],[0,0,0],[0,0],[0,0]]
-    
-    types = [1,1,1,1,3,3,1,1,1,1]
-    mus = [[-.5,0,1,0,-.5,0],[-.5,0,1,0,-.5,1],[-.5,0,1,0,-.5,0],[-.5,0,1,0,-.5,1],[-.5,0,.5,0],[0,.5,1,1],[-.5,1,1,0,-.5,0],[-.5,1,1,0.25,-.5,1],[-.5,1,1,0.5,-.5,0],[-.5,1,1,0.75,-.5,1]]
+    #types = [0,1,2,3,4,5,7,6]
+    #mus = [[0,0],[0,0,0,0,0,0],[0,0,0,0,0,1],[0,0,0,0],[0,0,0,0],[0,0,0],[0,0],[0,0]]
+    #types = [1,1,1,1,3,3,1,1,1,1]
+    #mus = [[-.5,0,1,0,-.5,0],[-.5,0,1,0,-.5,1],[-.5,0,1,0,-.5,0],[-.5,0,1,0,-.5,1],[-.5,0,.5,0],[0,.5,1,1],[-.5,1,1,0,-.5,0],[-.5,1,1,0.25,-.5,1],[-.5,1,1,0.5,-.5,0],[-.5,1,1,0.75,-.5,1]]
 
+    types = [1,2]
+    mus = [[0,0,0,0,0,0],[0,0,0,0,0,0]]
 
     if types[0] == 0 or types[0] == 1 or types[0] ==2:
         inflow = (2/3)*vel*0.2*(1+mus[0][1])
@@ -72,6 +77,9 @@ if __name__ == "__main__":
     rot_mat = np.asarray([[0,-1],[1,0]])
     lost_volume = 0
 
+    if compare_full:
+        uxo,uyo,po,orig_pts,orig_lin,A = arch.testSolver(N,vel,types[0],types[1])
+
     for typ,mu in zip(types,mus):
         print("----",i,"----")
 
@@ -84,7 +92,12 @@ if __name__ == "__main__":
             mu[-1] = vel
         else:
             mu.append(vel)
-        ux_i,uy_i,p_i,points_i,lin_points_i, out =  arch.get_archetype(N,typ,mu)
+        ux_i,uy_i,p_i,points_i,lin_points_i, out,inl =  arch.get_archetype(N,typ,mu)
+        
+        e = 1E-4
+        cond1 = ~np.logical_and(points_i[:,0] < e, points_i[:,0] > -e)
+        cond2 = ~np.logical_and(lin_points_i[:,0] < e, lin_points_i[:,0] > -e)
+
         if typ == 0:
             outlet = np.concatenate(([0],ux_i[out],[0]))
             outpts = points_i[out,1]
@@ -311,38 +324,86 @@ if __name__ == "__main__":
                 xi += xi_new
             yi -= yi_new  
 
+        
+
         if i == 0:
             points = points_i
             lin_points = lin_points_i
         else:
-            points = np.concatenate((points,points_i))
-            lin_points = np.concatenate((lin_points,lin_points_i))
+            points = np.concatenate((points,points_i[cond1]))
+            lin_points = np.concatenate((lin_points,lin_points_i[cond2]))
         if (typ == 2 and connect == 1) or typ == 3:
             rotate += 1
         elif typ == 4:
             rotate -= 1
 
-        ux = np.concatenate((ux,ux_i))
-        uy = np.concatenate((uy,uy_i))
+        if i == 0:
+            ux = np.concatenate((ux,ux_i))
+            uy = np.concatenate((uy,uy_i))
+        else:
+            ux = np.concatenate((ux,ux_i[cond1]))
+            uy = np.concatenate((uy,uy_i[cond1]))
         if typ == 7:
             p += p_i.max()
         else:
             p += p_i[0]
-        p = np.concatenate((p,p_i))
+        
+        if i == 0:
+            p = np.concatenate((p,p_i))
+        else:
+            p = np.concatenate((p,p_i[cond2]))
+
         i += 1
 
     print("TIME:", time.time()-start_time)
 
+    index_list = []
+    if compare_full:
+        i = 0
+        lo = orig_pts[orig_lin]
+        new_p = np.zeros_like(p)
+        for [x,y] in lin_points:
+            cond1 = np.logical_and(lo[:,0]< x +e,lo[:,0]> x - e)
+            cond2 = np.logical_and(lo[:,1]< y +e,lo[:,1]> y - e)
+            index = np.where(np.logical_and(cond1,cond2))[0][0]
+            new_p[index] = p[i]
+            i += 1
+        lin_points = lo
+        p = new_p
+        
+
     p_tri = arch.plotHelp(lin_points,N-1,1.5,coord_mask = False)
     v_tri = arch.plotHelp(points,N,1.5,coord_mask = False)
 
-    #figur2, x-hastighet
-    arch.contourPlotter(ux,v_tri,title="x-velocity, $u_x$",fname="combo_figur1",HD = True)
-    #figur3, y-hastighet
-    arch.contourPlotter(uy,v_tri,title="y-velocity, $u_y$",fname="combo_figur2",HD = True)
-    #figur4, hastighetsmagnitude
-    arch.contourPlotter(np.sqrt(ux**2 + uy**2),v_tri,title="Velocity-magnitude, $|u|$",fname="combo_figur3",HD = True)
-    #figur6, trykk
-    arch.contourPlotter(p,p_tri,title="Pressure, p",fname="combo_figur4",HD = True)
+    print("More plotting...")
 
+    if compare_full:
+        print("----------RELATIVE NORMS----------")
+        print("x-velocity")
+        print(np.sqrt(((uxo-ux).T@A@(uxo-ux))/((uxo).T@A@(uxo))))
+        print("y-velocity")
+        print(np.sqrt(((uyo-uy).T@A@(uyo-uy))/((uyo).T@A@(uyo))))
+        print("pressure")
+        print(np.sqrt(((po-p).T@(po-p))/(po.T@po)))
+
+        
+        arch.contourPlotter(abs(uxo-ux),v_tri,title="x-velocity, $u_x$",fname="diff_x",HD = True)
+        #figur3, y-hastighet
+        arch.contourPlotter(abs(uyo-uy),v_tri,title="y-velocity, $u_y$",fname="diff_y",HD = True)
+        #figur4, hastighetsmagnitude
+        arch.contourPlotter(abs(np.sqrt(uxo**2 + uyo**2)-np.sqrt(ux**2 + uy**2)),v_tri,title="Velocity-magnitude, $|u|$",fname="diff_abs",HD = True)
+        #figur6, trykk
+        arch.contourPlotter(abs(po-p),p_tri,title="Pressure, p",fname="diff_p",HD = True)
+    
+    if plot_system:
+
+        #figur2, x-hastighet
+        arch.contourPlotter(ux,v_tri,title="x-velocity, $u_x$",fname="system_ux",HD = True)
+        #figur3, y-hastighet
+        arch.contourPlotter(uy,v_tri,title="y-velocity, $u_y$",fname="system_uy",HD = True)
+        #figur4, hastighetsmagnitude
+        arch.contourPlotter(np.sqrt(ux**2 + uy**2),v_tri,title="Velocity-magnitude, $|u|$",fname="system_abs",HD = True)
+        #figur6, trykk
+        arch.contourPlotter(p,p_tri,title="Pressure, p",fname="system_p",HD = True)
+    
     plt.close('all')
