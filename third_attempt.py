@@ -1047,7 +1047,7 @@ def convergence(Sol_mat,mus):
     plt.savefig("Convergence_plot_"+str(typ), dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
     plt.close("all")
 
-if __name__ == "__main__":
+if __name__ != "__main__":
     offline =False 
     plot_eigenvalues = False
     plot_original = True
@@ -1723,3 +1723,63 @@ def get_archetype(N,typ,mu):
         uy = -uy
     return ux,uy,p,points,points[lin_set], neu
 
+N = 2
+
+typ1 = 0
+typ2 = 1
+
+points1,elements1,lin_set1,non_homog1,homog1,neu1,inner1 = createDomain(N,typ1)
+points2,elements2,lin_set2,non_homog2,homog2,neu2,inner2 = createDomain(N,typ2)
+connect1 = np.concatenate(([neu1[0]-(5*2**N+1)],neu1,[neu1[-1]+5*2**N+1]))
+connect2 = np.concatenate(([non_homog2[0]-(5*2**N+1)],non_homog2,[non_homog2[-1]+(5*2**N+1)]))
+
+testing = np.zeros((5,len(points1)))
+testing[0,lin_set1] = 1
+testing[1,non_homog1] = 1
+testing[2,homog1] = 1
+testing[3,neu1] = 1
+testing[4,inner1] = 1
+'''
+plt.figure()
+plotElements(points1,elements1)
+plt.title('Domain w/bilinear and biquadratic elements')
+for i,p in enumerate(points1):
+    plt.annotate(str(i),p)
+plt.axis('scaled')
+plt.savefig("aaa_type"+str(typ1), dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
+
+plt.figure()
+plotElements(points2,elements2)
+plt.title('Domain w/bilinear and biquadratic elements')
+for i,p in enumerate(points2):
+    plt.annotate(str(i),p)
+plt.axis('scaled')
+plt.savefig("aaa_type"+str(typ2), dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
+
+plt.close('all')
+'''
+
+for el in elements2:
+    el[0] += len(points1)
+    el[1] += len(points1)
+
+connect_temp = connect2 +len(points1)
+print(connect_temp)
+print(len(elements1))
+print(elements2[0][0])
+
+new_lin_elements = np.zeros((len(elements1)+len(elements2),4))
+new_sq_elements = np.zeros((len(elements1)+len(elements2),9))
+
+i = 0
+for el in elements1:
+    new_lin_elements[i] = el[0]
+    new_sq_elements[i] = el[1]
+    i += 1
+for el in elements2:
+    for el_lin in el[0]:
+        
+    for el_sq in el[1]:
+    new_lin_elements[i] = el[0]
+    new_sq_elements[i] = el[1]
+    i += 1
