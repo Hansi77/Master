@@ -1050,26 +1050,26 @@ def convergence(Sol_mat,mus):
 if __name__ == "__main__":
     offline = False
     plot_eigenvalues = False
-    plot_original = False
+    plot_original = True
     test_convergence = False
     
     N = 5
     #type domene: 0, 1, 2, 3, 4, 5, 6, 7
-    typ = 2
+    typ = 1
     #archetype 0 #length,width
-    #mu = [-.5,.5,1]
+    #mu = [-.5,0,1]
     #subdomains = 1
     #archetype 1,2
-    mu = [-.5,0,0,-.5,1,7] #length pre bifurcation, inlet and outlet width,bifurcation outlet width,length scale bifurcation,length scale post bifurcation,amplitude
+    mu = [-.5,0,1,-.5,-.5,3] #length pre bifurcation, inlet and outlet width,bifurcation outlet width,length scale bifurcation,length scale post bifurcation,amplitude
     subdomains = 4
     #archetype 3
-    #mu = [-.5,1,-.5,-.5,1] #length pre corner, width inlet, width outlet, lemgth post corner, amplitude
+    #mu = [0,0,0,0,1] #length pre corner, width inlet, width outlet, lemgth post corner, amplitude
     #subdomains = 3
     #archetype 5
-    #mu = [0,0,1,1] #length pre-hole, length post_hole, width, amplitude
+    #mu = [0,0,0,1] #length pre-hole, length post_hole, width, amplitude
     #subdomains = 8
     #archetype 6 / 7
-    #mu = [.5,.5,5] #width outlet, width inlet, amplitude / width inlet, width outlet, amplitude
+    #mu = [0,0,1] #width outlet, width inlet, amplitude / width inlet, width outlet, amplitude
     #subdomains = 2
     points,elements,lin_set,non_homog,homog,neu,inner = createDomain(N,typ)
     print("Archetype", typ)
@@ -1318,6 +1318,7 @@ if __name__ == "__main__":
             J4 = [1+mu[4],1+mu[1]]
 
             Js = [J1,J2,J3,J4]
+        
         elif typ == 3:
             J1 = [mu[0]+1,mu[1] +1]
             J2 = [mu[2]+1,mu[3] +1]
@@ -1394,14 +1395,9 @@ if __name__ == "__main__":
             cond5 = points[:,1] <= .2
 
             points[cond1,0] = (1+mu[0])*points[cond1,0] - 0.4*mu[0]
-            temp2 = (1+mu[2])*points[cond2,0] - 0.4*mu[2]
-            temp4 = (1+mu[4])*points[cond4,0] - (0.6+0.2*mu[2])*mu[4] + 0.1*mu[2]
-            if mu[2] < 0:
-                points[cond2,0] = temp2
-                points[cond4,0] = temp4
-            else:
-                points[cond4,0] = temp4
-                points[cond2,0] = temp2
+            points[cond2,0] = (1+mu[2])*points[cond2,0] - 0.4*mu[2]
+            points[cond4,0] = points[cond4,0] + 0.2*mu[2]            
+            points[cond4,0] = (1+mu[4])*points[cond4,0] - (0.6+0.2*mu[2])*mu[4]
             points[cond3,1] = (1+mu[3])*points[cond3,1] - .2*mu[3]
             points[cond5,1] = (1+mu[1])*points[cond5,1] - .2*mu[1]
 
@@ -1468,8 +1464,13 @@ if __name__ == "__main__":
             press_orig = p_o
 
             print("----------------NORMS--------------------")
+            print("test", (uxinner.T@A@uxinner))
+            print("x-velocity H1")
+            print(np.sqrt( ( (uxinner-uxr).T@A@(uxinner-uxr) ) /(uxinner.T@A@uxinner) ) )            
+            print("y-velocity H1")
+            print(np.sqrt(((uyinner-uyr).T@A@(uyinner-uyr))/(uyinner.T@A@uyinner)))            
             print("Absolute velocity H1")
-            print(np.sqrt(((norm_vel_o-norm_vel_r).T@A@(norm_vel_o-norm_vel_r))/norm_vel_o.T@A@norm_vel_o))
+            print(np.sqrt(((norm_vel_o-norm_vel_r).T@A@(norm_vel_o-norm_vel_r))/(norm_vel_o.T@A@norm_vel_o)))
             print("Pressure L2")
             print(np.sqrt((pinner-pr).T@(pinner-pr)/(pinner.T@pinner)))
 
@@ -1484,10 +1485,10 @@ if __name__ == "__main__":
 
         if typ == 0:
             if plot_original:
-                contourPlotter(ux_o,tri1,title = "$u_x$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_ux_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
-                contourPlotter(uy_o,tri1,title = "$u_y$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uy_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
-                contourPlotter(vel_mag_orig,tri1,title = "$|u|$, $\mu$  = "+str(mu),fname = "type_"+str(typ)+"_abs_u_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
-                contourPlotter(press_orig,tri2,title = "$p$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_p_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
+                #contourPlotter(abs(ux_o-ux),tri1,title = "$u_x$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_ux_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
+                #contourPlotter(abs(uy_o-uy),tri1,title = "$u_y$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uy_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
+                contourPlotter(abs(vel_mag_orig-vel_mag_red),tri1,title = "Difference, $|u-u_r|$, $\mu$  = "+str(mu),fname = "type_"+str(typ)+"_abs_u_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
+                contourPlotter(abs(press_orig-press_red),tri2,title = "Difference $p-p_r$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_p_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
             contourPlotter(ux,tri1,title = "$u_{x,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uxr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
             contourPlotter(uy,tri1,title = "$u_{y,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uyr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")      
             contourPlotter(vel_mag_red,tri1,title = "$|u_r|$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_abs_ur_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
@@ -1495,8 +1496,8 @@ if __name__ == "__main__":
         
         elif typ == 1 or typ == 2:
             if plot_original:
-                contourPlotter(vel_mag_orig,tri1,title = "|u| original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_velocity_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+str(mu[5])+".png")
-                contourPlotter(press_orig,tri2,title = "p original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+"_"+str(mu[5])+".png")
+                contourPlotter(abs(vel_mag_orig-vel_mag_red),tri1,title = "Difference, $|u-u_r|$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_velocity_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+str(mu[5])+".png")
+                contourPlotter(abs(press_orig-press_red),tri2,title = "Difference, $p-p_r$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+"_"+str(mu[5])+".png")
             contourPlotter(ux,tri1,title = "$u_{x,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uxr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+"_"+str(mu[5])+".png")
             contourPlotter(uy,tri1,title = "$u_{y,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uyr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+"_"+str(mu[5])+".png")      
             contourPlotter(vel_mag_red,tri1,title = "$|u_r|$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_abs_ur_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+"_"+str(mu[5])+".png")
@@ -1504,8 +1505,8 @@ if __name__ == "__main__":
 
         elif typ == 3:
             if plot_original:
-                contourPlotter(vel_mag_orig,tri1,title = "Velocity magnitude original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_velocity_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+".png")
-                contourPlotter(press_orig,tri2,title = "Pressure original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+".png")
+                contourPlotter(abs(vel_mag_orig-vel_mag_red),tri1,title = "Difference, $|u-u_r|$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_velocity_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+".png")
+                contourPlotter(abs(press_orig-press_red),tri2,title = "Difference, $p-p_r$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+".png")
             contourPlotter(ux,tri1,title = "$u_{x,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uxr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+".png")
             contourPlotter(uy,tri1,title = "$u_{y,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uyr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+".png")      
             contourPlotter(vel_mag_red,tri1,title = "$|u_r|$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_abs_ur_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+"_"+str(mu[4])+".png")
@@ -1513,8 +1514,8 @@ if __name__ == "__main__":
        
         elif typ == 5:
             if plot_original:
-                contourPlotter(vel_mag_orig,tri1,title = "Velocity magnitude original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_velocity_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
-                contourPlotter(press_orig,tri2,title = "Pressure original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
+                contourPlotter(abs(vel_mag_orig-vel_mag_red),tri1,title = "Difference, $|u-u_r|$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_velocity_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
+                contourPlotter(abs(press_orig-press_red),tri2,title = "Difference, $p-p_r$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
             contourPlotter(ux,tri1,title = "$u_{x,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uxr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
             contourPlotter(uy,tri1,title = "$u_{y,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uyr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")      
             contourPlotter(vel_mag_red,tri1,title = "$|u_r|$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_abs_ur_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+"_"+str(mu[3])+".png")
@@ -1522,8 +1523,8 @@ if __name__ == "__main__":
          
         elif typ == 6 or typ == 7:
             if plot_original:
-                contourPlotter(vel_mag_orig,tri1,title = "Velocity magnitude original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_velocity_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
-                contourPlotter(press_orig,tri2,title = "Pressure original, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
+                contourPlotter(abs(vel_mag_orig-vel_mag_red),tri1,title = "Difference, $|u-u_r|$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_velocity_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
+                contourPlotter(abs(press_orig-press_red),tri2,title = "Difference, $p-p_r$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_original_pressure"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
             contourPlotter(ux,tri1,title = "$u_{x,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uxr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
             contourPlotter(uy,tri1,title = "$u_{y,r}$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_uyr_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")      
             contourPlotter(vel_mag_red,tri1,title = "$|u_r|$, $\mu$ = "+str(mu),fname = "type_"+str(typ)+"_abs_ur_"+str(mu[0])+"_"+str(mu[1])+"_"+str(mu[2])+".png")
@@ -1595,20 +1596,17 @@ def get_archetype(N,typ,mu):
         red_sol = reducedSolver(Ax_r1,Ax_r2,Ay_r1,Ay_r2,Dx_r,Dy_r,DxT_r,DyT_r,Ax_rhs_r,Ay_rhs_r,Dx_rhs_r,q_list,mu,points,non_homog,typ)
     
         cond1 = points[:,0] < .4
-        cond2 = np.logical_and(points[:,0] >= .4,points[:,0] <= .60005) 
+        cond2 = np.logical_and(points[:,0] >= .4,points[:,0] <= .60005)
+
         cond3 = points[:,1] > .2 
         cond4 = points[:,0] > .60005
         cond5 = points[:,1] <= .2
 
         points[cond1,0] = (1+mu[0])*points[cond1,0] - 0.4*mu[0]
-        temp2 = (1+mu[2])*points[cond2,0] - 0.4*mu[2]
-        temp4 = (1+mu[4])*points[cond4,0] - (0.6+0.2*mu[2])*mu[4] + 0.1*mu[2]
-        if mu[2] < 0:
-            points[cond2,0] = temp2
-            points[cond4,0] = temp4
-        else:
-            points[cond4,0] = temp4
-            points[cond2,0] = temp2
+        points[cond2,0] = (1+mu[2])*points[cond2,0] - 0.4*mu[2]
+        points[cond4,0] = points[cond4,0] + 0.2*mu[2]
+        points[cond4,0] = (1+mu[4])*points[cond4,0] - (0.6+0.2*mu[2])*mu[4]
+
         points[cond3,1] = (1+mu[3])*points[cond3,1] - .2*mu[3]
         points[cond5,1] = (1+mu[1])*points[cond5,1] - .2*mu[1]
 
@@ -1731,6 +1729,7 @@ def connect_archetype(N,typ1,typ2):
         neuvert = neu1[int(len(neu1)/2):]
         neu1 = neu1[:int(len(neu1)/2)]
     connect1 = np.concatenate(([neu1[0]-(5*2**N+1)],neu1,[neu1[-1]+5*2**N+1]))
+
     if typ2 == 3:
         connect2 = np.concatenate(([non_homog2[0]-(3*2**N+1)],non_homog2,[non_homog2[-1]+(3*2**N+1)]))
     else:
@@ -1812,7 +1811,10 @@ def testSolver(N,vel,typ1,typ2,plot = True):
     A_rhs = matrixShaver(A,inner,non_homog)
 
     y_n = points[non_homog,1]
-    rg = 100*vel*(0.2-y_n)*y_n
+    if typ1 == 6:
+        rg = 25*vel*(0.4-y_n)*y_n
+    else:
+        rg = 100*vel*(0.2-y_n)*y_n
 
     #lager høyresiden
     fx = -A_rhs@rg
@@ -1825,15 +1827,23 @@ def testSolver(N,vel,typ1,typ2,plot = True):
     u_bar = solver(Block,rhs)
 
     ux,uy,p = solHelper(u_bar,rg,inner,points,non_homog)
-    print(len(ux),len(uy),len(p))
     tri1 = plotHelp(points,N,1,coord_mask=False)
     tri2 = plotHelp(points[lin_set],N,1,coord_mask = False)
 
+    ##plt.figure()
+    #plotElements(points,elements)
+    #plt.title('Domain w/bilinear and biquadratic elements')
+    #for i,p in enumerate(points):
+    #    plt.annotate(str(i),p)
+    #plt.axis('scaled')
+    #plt.savefig("aaa_type"+str(typ1), dpi=500, facecolor='w', edgecolor='w',orientation='portrait', format=None,transparent=False, bbox_inches=None, pad_inches=0.1, metadata=None)
+
+
     if plot:
-        contourPlotter(ux,tri1,title = "$u_{x}$",fname = "full_"+str(typ1)+str(typ2)+"_ux.png")
-        contourPlotter(uy,tri1,title = "$u_{y}$",fname = "full_"+str(typ1)+str(typ2)+"_uy.png")      
-        contourPlotter(np.sqrt(ux**2 +uy**2),tri1,title = "$|u|$",fname = "full_"+str(typ1)+str(typ2)+"_abs_u.png")
-        contourPlotter(p,tri2,title = "$p$",fname = "full_"+str(typ1)+str(typ2)+"_p.png")
+        contourPlotter(ux,tri1,title = "Full model, $u_{x}$",fname = str(typ1)+str(typ2)+"_full_ux.png")
+        contourPlotter(uy,tri1,title = "Full model, $u_{y}$",fname = str(typ1)+str(typ2)+"_full_uy.png")      
+        contourPlotter(np.sqrt(ux**2 +uy**2),tri1,title = "Full model, $|u|$",fname = str(typ1)+str(typ2)+"_full_abs.png")
+        contourPlotter(p,tri2,title = "Full model, $p$",fname = str(typ1)+str(typ2)+"_full_p.png")
         print("Finished original plots...")
         plt.close('all')
 

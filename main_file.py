@@ -9,7 +9,7 @@ if __name__ == "__main__":
     vel = 1 #inlet max velocity
     
     #SETT DENNE TIL TRUE OM MAN VIL SAMMENLIGNE KOMPONENTBASERT OG FULL MODELL
-    compare_full = True
+    compare_full = False
     plot_system = True
     #STRAIGHT PIPE
     #Type 0: [length 1+mu, width 0.2(1+mu)]
@@ -27,23 +27,16 @@ if __name__ == "__main__":
     #Type 6: [width outlet 0.2(1+mu),width inlet 0.4(1+mu)]
     #EXPANSION PIPE
     #Type 7: [width inlet 0.2(1+mu),width outlet 0.4(1+mu)]
-    #types = [5,6,3,7,3,5]
-    #mus = [[0,0,1],[.5,0],[-.25,.5,0,-.25],[0,0],[-.25,1,.5,.25],[1,1,0.5]] #mu-list without the velocity parameter
-    #types = [5,5,3,5,5]
-    #mus = [[0,0,0],[0,0,0],[0,0,0,0],[0,0,0],[0,0,0]]
-    #types = [0,0,0,0,0]
-    #mus = [[0,0],[0,0],[0,0],[0,0],[0,0]]
+
+    types = [1,1,1,1,4,4,1,1,1,1,3,3,1,1,1,1,4,4,1,1,1,1,3,3,1,1,1,1]
+    mus = [[0,0,1,-.5,-.5,0],[0,0,1,-.5,-.5,1],[0,0,1,-.5,-.5,0],[0,0,1,-.5,-.5,1],[0,0,0,0],[0,0,0.5,0],[0,0.5,1,-.5,-.5,0],[0,0.5,1,-.5,-.5,1],[0,0.5,1,-.5,-.5,0],[0,0.5,1,-.5,-.5,1],[0,.5,0,0],[0,0,-0.25,0],[0,-0.25,1,-.5,-.5,0],[0,-0.25,1,-.5,-.5,1],[0,-0.25,1,-.5,-.5,0],[0,-0.25,1,-.5,-.5,1],[0,-.25,0,0],[0,0,0.5,0],[0,0.5,1,-.5,-.5,0],[0,0.5,1,-.5,-.5,1],[0,0.5,1,-.5,-.5,0],[0,0.5,1,-.5,-.5,1],[0,.5,0,0],[0,0,-0.25,0],[0,-0.25,1,-.5,-.5,0],[0,-0.25,1,-.5,-.5,1],[0,-0.25,1,-.5,-.5,0],[0,-0.25,1,-.5,-.5,1]]
+
+    #types = [0,7,5,7,0,4,4,5,6,5,6,5,4,1,4,7,1,6,0]
+    #mus =[[-.3,-.3],[-.3,-.25],[.5,.5,.5],[.5,0],[0,1],[0.5,1,1.5,0.5],[0.5,1.5,2,0.5],[1,1,2],[.75,.5],[.5,.5,.75],[.5,-.125],[.2,.2,.5],[0,.5,-.5,0],[0,-.5,.5,0,0,0],[0,-.5,-.5,0],[-.5,-.25],[.5,.5,1,.5,.5,1],[0,-.25],[0,0]]
+
     #types = [0,3,3,0,4,4,0,3,3,0,4,4,0]
     #mus = [[0,.5],[0,.5,.5,-.5],[-.5,.5,.5,0],[0,.5],[0,.5,.5,-.5],[-.5,.5,.5,0],[0,.5],[0,.5,.5,-.5],[-.5,.5,.5,0],[0,.5],[0,.5,.5,-.5],[-.5,.5,.5,0],[0,.5]]
-    #types = [2,2,2,2,0]
-    #mus = [[0.25,0,0,0.25,0,1],[0.5,0,0,0.5,0,1],[0.75,0,0,0.75,0,1],[1,0,0,1,0,1],[0,0]]
-    #types = [0,1,2,3,4,5,7,6]
-    #mus = [[0,0],[0,0,0,0,0,0],[0,0,0,0,0,1],[0,0,0,0],[0,0,0,0],[0,0,0],[0,0],[0,0]]
-    #types = [1,1,1,1,3,3,1,1,1,1]
-    #mus = [[-.5,0,1,0,-.5,0],[-.5,0,1,0,-.5,1],[-.5,0,1,0,-.5,0],[-.5,0,1,0,-.5,1],[-.5,0,.5,0],[0,.5,1,1],[-.5,1,1,0,-.5,0],[-.5,1,1,0.25,-.5,1],[-.5,1,1,0.5,-.5,0],[-.5,1,1,0.75,-.5,1]]
-
-    types = [1,2]
-    mus = [[0,0,0,0,0,0],[0,0,0,0,0,0]]
+    print("Types: ", types)
 
     if types[0] == 0 or types[0] == 1 or types[0] ==2:
         inflow = (2/3)*vel*0.2*(1+mus[0][1])
@@ -69,7 +62,7 @@ if __name__ == "__main__":
     uy = []
     p = []
 
-    start_time = time.time()
+
     i = 0
     rotate = 0
     xi = 0
@@ -79,15 +72,16 @@ if __name__ == "__main__":
 
     if compare_full:
         uxo,uyo,po,orig_pts,orig_lin,A = arch.testSolver(N,vel,types[0],types[1])
-
+    
+    start_time = time.time()
     for typ,mu in zip(types,mus):
-        print("----",i,"----")
+        #print("----",i,"----")
 
         rotate = rotate%4
         if typ == 1:
             down = mu[-1]
             mu[-1] = vel
-        if typ == 2:
+        elif typ == 2:
             connect = mu[-1]
             mu[-1] = vel
         else:
@@ -121,8 +115,10 @@ if __name__ == "__main__":
             outlet = np.concatenate(([0],ux_i[out],[0]))
             outpts = points_i[out,1]
             dx = abs(outpts[1]-outpts[0])
-            outpts = outpts - outpts[0] + dx
-            outletpts = np.concatenate(([outpts[0] - dx] ,outpts,[outpts[-1] + dx]))
+            if down:
+                outletpts = np.concatenate(([outpts[0] + dx] ,outpts,[outpts[-1] - dx]))
+            else:
+                outletpts = np.concatenate(([outpts[0] - dx] ,outpts,[outpts[-1] + dx]))
             poly = np.polyfit(outletpts,outlet,deg=2)
             #vel = (1/2)*poly[0]*(0.2*(1+mu[2]))**2 + (3/4)*poly[1]*0.2*(1+mu[2]) #+(3/2)*poly[2]
             vel = abs(-(poly[1]**2)/(4*poly[0])+poly[2])
@@ -387,23 +383,23 @@ if __name__ == "__main__":
         print(np.sqrt(((po-p).T@(po-p))/(po.T@po)))
 
         
-        arch.contourPlotter(abs(uxo-ux),v_tri,title="x-velocity, $u_x$",fname="diff_x",HD = True)
+        arch.contourPlotter(abs(uxo-ux),v_tri,title="Difference, $u_x$",fname=str(types[0])+str(types[1])+"_diff_x")
         #figur3, y-hastighet
-        arch.contourPlotter(abs(uyo-uy),v_tri,title="y-velocity, $u_y$",fname="diff_y",HD = True)
+        arch.contourPlotter(abs(uyo-uy),v_tri,title="Difference, $u_y$",fname=str(types[0])+str(types[1])+"_diff_y")
         #figur4, hastighetsmagnitude
-        arch.contourPlotter(abs(np.sqrt(uxo**2 + uyo**2)-np.sqrt(ux**2 + uy**2)),v_tri,title="Velocity-magnitude, $|u|$",fname="diff_abs",HD = True)
+        arch.contourPlotter(abs(np.sqrt(uxo**2 + uyo**2)-np.sqrt(ux**2 + uy**2)),v_tri,title="Difference, $|u|$",fname=str(types[0])+str(types[1])+"_diff_abs")
         #figur6, trykk
-        arch.contourPlotter(abs(po-p),p_tri,title="Pressure, p",fname="diff_p",HD = True)
+        arch.contourPlotter(abs(po-p),p_tri,title="Difference, p",fname=str(types[0])+str(types[1])+"_diff_p")
     
     if plot_system:
 
         #figur2, x-hastighet
-        arch.contourPlotter(ux,v_tri,title="x-velocity, $u_x$",fname="system_ux",HD = True)
+        arch.contourPlotter(ux,v_tri,title="Reduced model, $u_x$",fname=str(types)+"_red_ux")
         #figur3, y-hastighet
-        arch.contourPlotter(uy,v_tri,title="y-velocity, $u_y$",fname="system_uy",HD = True)
+        arch.contourPlotter(uy,v_tri,title="Reduced model, $u_y$",fname=str(types)+"_red_uy")
         #figur4, hastighetsmagnitude
-        arch.contourPlotter(np.sqrt(ux**2 + uy**2),v_tri,title="Velocity-magnitude, $|u|$",fname="system_abs",HD = True)
+        arch.contourPlotter(np.sqrt(ux**2 + uy**2),v_tri,title="Reduced model, $|u|$",fname=str(types)+"_red_abs",HD = True)
         #figur6, trykk
-        arch.contourPlotter(p,p_tri,title="Pressure, p",fname="system_p",HD = True)
+        arch.contourPlotter(p,p_tri,title="Reduced model, $p$",fname=str(types)+"_red_p", HD = True)
     
     plt.close('all')
